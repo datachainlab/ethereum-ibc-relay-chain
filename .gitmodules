@@ -1,0 +1,4 @@
+[submodule "yui-ibc-solidity"]
+	path = yui-ibc-solidity
+	url = https://github.com/hyperledger-labs/yui-ibc-solidity
+	branch = main
