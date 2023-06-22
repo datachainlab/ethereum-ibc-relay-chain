@@ -217,7 +217,6 @@ func (c *Chain) QueryConnection(ctx core.QueryContext) (*conntypes.QueryConnecti
 		logger.Error("failed to get connection", zap.Error(err))
 		return nil, err
 	} else if !found {
-		logger.Error("connection not found", zap.String("connection-id", c.pathEnd.ConnectionID))
 		return emptyConnRes, nil
 	}
 	return conntypes.NewQueryConnectionResponse(connectionEndToPB(conn), nil, ctx.Height().(clienttypes.Height)), nil
@@ -247,7 +246,6 @@ func (c *Chain) QueryChannel(ctx core.QueryContext) (chanRes *chantypes.QueryCha
 		logger.Error("failed to get channel", zap.Error(err))
 		return nil, err
 	} else if !found {
-		logger.Error("channel not found", zap.String("channel-id", c.pathEnd.ChannelID))
 		return emptyChannelRes, nil
 	}
 	return chantypes.NewQueryChannelResponse(channelToPB(chann), nil, ctx.Height().(clienttypes.Height)), nil
