@@ -223,23 +223,6 @@ func (c *Chain) QueryChannel(ctx core.QueryContext) (chanRes *chantypes.QueryCha
 	return chantypes.NewQueryChannelResponse(channelToPB(chann), nil, ctx.Height().(clienttypes.Height)), nil
 }
 
-// NOTE: The current implementation returns all packets, including those for that acknowledgement has already received.
-// QueryPacketCommitments returns an array of packet commitments
-func (c *Chain) QueryPacketCommitments(ctx core.QueryContext, offset uint64, limit uint64) (comRes *chantypes.QueryPacketCommitmentsResponse, err error) {
-	// WARNING: It may be slow to use in the production. Instead of it, it might be better to use an external event indexer to get all packet commitments.
-	packets, err := c.getAllPackets(ctx, c.pathEnd.PortID, c.pathEnd.ChannelID)
-	if err != nil {
-		return nil, err
-	}
-	var res chantypes.QueryPacketCommitmentsResponse
-	for _, p := range packets {
-		ps := chantypes.NewPacketState(c.pathEnd.PortID, c.pathEnd.ChannelID, p.Sequence, chantypes.CommitPacket(c.Codec(), p))
-		res.Commitments = append(res.Commitments, &ps)
-	}
-	res.Height = ctx.Height().(clienttypes.Height)
-	return &res, nil
-}
-
 // QueryUnreceivedPackets returns a list of unrelayed packet commitments
 func (c *Chain) QueryUnreceivedPackets(ctx core.QueryContext, seqs []uint64) ([]uint64, error) {
 	var ret []uint64
@@ -255,7 +238,7 @@ func (c *Chain) QueryUnreceivedPackets(ctx core.QueryContext, seqs []uint64) ([]
 }
 
 // QueryUnfinalizedRelayedPackets returns packets and heights that are sent but not received at the latest finalized block on the counterparty chain
-func (c *Chain) QueryUnfinalizedRelayPackets(ctx core.QueryContext, counterparty *core.ProvableChain) (core.PacketInfoList, error) {
+func (c *Chain) QueryUnfinalizedRelayPackets(ctx core.QueryContext, counterparty core.LightClientICS04Querier) (core.PacketInfoList, error) {
 	packets, err := c.findSentPackets(ctx, c.sendCheckpoint)
 	if err != nil {
 		return nil, err
@@ -276,24 +259,9 @@ func (c *Chain) QueryUnfinalizedRelayPackets(ctx core.QueryContext, counterparty
 	if len(packets) == 0 {
 		c.sendCheckpoint = ctx.Height().GetRevisionHeight()
 	} else {
-		c.sendCheckpoint = packets[0].Height.GetRevisionHeight()
+		c.sendCheckpoint = packets[0].EventHeight.GetRevisionHeight()
 	}
 	return packets, nil
-}
-
-// QueryPacketAcknowledgementCommitments returns an array of packet acks
-func (c *Chain) QueryPacketAcknowledgementCommitments(ctx core.QueryContext, offset uint64, limit uint64) (comRes *chantypes.QueryPacketAcknowledgementsResponse, err error) {
-	// WARNING: It may be slow to use in the production. Instead of it, it might be better to use an external event indexer to get all packet acknowledgements.
-	acks, err := c.getAllAcknowledgements(ctx, c.pathEnd.PortID, c.pathEnd.ChannelID)
-	if err != nil {
-		return nil, err
-	}
-	var res chantypes.QueryPacketAcknowledgementsResponse
-	for _, a := range acks {
-		ps := chantypes.NewPacketState(c.pathEnd.PortID, c.pathEnd.ChannelID, a.Sequence, chantypes.CommitAcknowledgement(a.Data))
-		res.Acknowledgements = append(res.Acknowledgements, &ps)
-	}
-	return &res, nil
 }
 
 // QueryUnreceivedAcknowledgements returns a list of unrelayed packet acks
@@ -311,7 +279,7 @@ func (c *Chain) QueryUnreceivedAcknowledgements(ctx core.QueryContext, seqs []ui
 }
 
 // QueryUnfinalizedRelayedAcknowledgements returns acks and heights that are sent but not received at the latest finalized block on the counterpartychain
-func (c *Chain) QueryUnfinalizedRelayAcknowledgements(ctx core.QueryContext, counterparty *core.ProvableChain) (core.PacketInfoList, error) {
+func (c *Chain) QueryUnfinalizedRelayAcknowledgements(ctx core.QueryContext, counterparty core.LightClientICS04Querier) (core.PacketInfoList, error) {
 	packets, err := c.findReceivedPackets(ctx, c.recvCheckpoint)
 	if err != nil {
 		return nil, err
@@ -332,7 +300,7 @@ func (c *Chain) QueryUnfinalizedRelayAcknowledgements(ctx core.QueryContext, cou
 	if len(packets) == 0 {
 		c.recvCheckpoint = ctx.Height().GetRevisionHeight()
 	} else {
-		c.recvCheckpoint = packets[0].Height.GetRevisionHeight()
+		c.recvCheckpoint = packets[0].EventHeight.GetRevisionHeight()
 	}
 	return packets, nil
 }
