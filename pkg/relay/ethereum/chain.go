@@ -35,9 +35,6 @@ type Chain struct {
 	relayerPrvKey *ecdsa.PrivateKey
 	client        *client.ETHClient
 	ibcHandler    *ibchandler.Ibchandler
-
-	sendCheckpoint uint64
-	recvCheckpoint uint64
 }
 
 var _ core.Chain = (*Chain)(nil)
@@ -239,7 +236,12 @@ func (c *Chain) QueryUnreceivedPackets(ctx core.QueryContext, seqs []uint64) ([]
 
 // QueryUnfinalizedRelayedPackets returns packets and heights that are sent but not received at the latest finalized block on the counterparty chain
 func (c *Chain) QueryUnfinalizedRelayPackets(ctx core.QueryContext, counterparty core.LightClientICS04Querier) (core.PacketInfoList, error) {
-	packets, err := c.findSentPackets(ctx, c.sendCheckpoint)
+	checkpoint, err := c.loadCheckpoint(sendCheckpointFileName)
+	if err != nil {
+		return nil, err
+	}
+
+	packets, err := c.findSentPackets(ctx, checkpoint)
 	if err != nil {
 		return nil, err
 	}
@@ -257,10 +259,14 @@ func (c *Chain) QueryUnfinalizedRelayPackets(ctx core.QueryContext, counterparty
 
 	packets = packets.Filter(seqs)
 	if len(packets) == 0 {
-		c.sendCheckpoint = ctx.Height().GetRevisionHeight()
+		checkpoint = ctx.Height().GetRevisionHeight()
 	} else {
-		c.sendCheckpoint = packets[0].EventHeight.GetRevisionHeight()
+		checkpoint = packets[0].EventHeight.GetRevisionHeight()
 	}
+	if err := c.saveCheckpoint(checkpoint, sendCheckpointFileName); err != nil {
+		return nil, err
+	}
+
 	return packets, nil
 }
 
@@ -280,7 +286,12 @@ func (c *Chain) QueryUnreceivedAcknowledgements(ctx core.QueryContext, seqs []ui
 
 // QueryUnfinalizedRelayedAcknowledgements returns acks and heights that are sent but not received at the latest finalized block on the counterpartychain
 func (c *Chain) QueryUnfinalizedRelayAcknowledgements(ctx core.QueryContext, counterparty core.LightClientICS04Querier) (core.PacketInfoList, error) {
-	packets, err := c.findReceivedPackets(ctx, c.recvCheckpoint)
+	checkpoint, err := c.loadCheckpoint(recvCheckpointFileName)
+	if err != nil {
+		return nil, err
+	}
+
+	packets, err := c.findReceivedPackets(ctx, checkpoint)
 	if err != nil {
 		return nil, err
 	}
@@ -298,10 +309,14 @@ func (c *Chain) QueryUnfinalizedRelayAcknowledgements(ctx core.QueryContext, cou
 
 	packets = packets.Filter(seqs)
 	if len(packets) == 0 {
-		c.recvCheckpoint = ctx.Height().GetRevisionHeight()
+		checkpoint = ctx.Height().GetRevisionHeight()
 	} else {
-		c.recvCheckpoint = packets[0].EventHeight.GetRevisionHeight()
+		checkpoint = packets[0].EventHeight.GetRevisionHeight()
 	}
+	if err := c.saveCheckpoint(checkpoint, recvCheckpointFileName); err != nil {
+		return nil, err
+	}
+
 	return packets, nil
 }
 
