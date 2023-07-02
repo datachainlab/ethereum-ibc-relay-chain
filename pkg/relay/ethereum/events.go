@@ -94,6 +94,49 @@ func (chain *Chain) findSentPackets(ctx core.QueryContext, fromHeight uint64) (c
 }
 
 func (chain *Chain) findReceivedPackets(ctx core.QueryContext, fromHeight uint64) (core.PacketInfoList, error) {
+	recvPacketEvents, err := chain.findRecvPacketEvents(ctx, fromHeight)
+	if err != nil {
+		return nil, err
+	}
+
+	writeAckEvents, err := chain.findWriteAckEvents(ctx, fromHeight)
+	if err != nil {
+		return nil, err
+	}
+
+	var packets core.PacketInfoList
+	for _, rp := range recvPacketEvents {
+		for _, wa := range writeAckEvents {
+			if rp.Packet.Sequence == wa.Sequence {
+				var height uint64
+				if rp.Raw.BlockNumber < wa.Raw.BlockNumber {
+					height = rp.Raw.BlockNumber
+				} else {
+					height = wa.Raw.BlockNumber
+				}
+				packets = append(packets, &core.PacketInfo{
+					Packet: channeltypes.Packet{
+						Sequence:           rp.Packet.Sequence,
+						SourcePort:         rp.Packet.SourcePort,
+						SourceChannel:      rp.Packet.SourceChannel,
+						DestinationPort:    rp.Packet.DestinationPort,
+						DestinationChannel: rp.Packet.DestinationChannel,
+						Data:               rp.Packet.Data,
+						TimeoutHeight:      clienttypes.Height(rp.Packet.TimeoutHeight),
+						TimeoutTimestamp:   rp.Packet.TimeoutTimestamp,
+					},
+					Acknowledgement: wa.Acknowledgement,
+					EventHeight:     clienttypes.NewHeight(0, height),
+				})
+				break
+			}
+		}
+	}
+
+	return packets, nil
+}
+
+func (chain *Chain) findRecvPacketEvents(ctx core.QueryContext, fromHeight uint64) ([]ibchandler.IbchandlerRecvPacket, error) {
 	query := ethereum.FilterQuery{
 		FromBlock: big.NewInt(int64(fromHeight)),
 		ToBlock:   big.NewInt(int64(ctx.Height().GetRevisionHeight())),
@@ -102,6 +145,35 @@ func (chain *Chain) findReceivedPackets(ctx core.QueryContext, fromHeight uint64
 		},
 		Topics: [][]common.Hash{{
 			abiRecvPacket.ID,
+		}},
+	}
+
+	logs, err := chain.client.FilterLogs(ctx.Context(), query)
+	if err != nil {
+		return nil, err
+	}
+
+	var events []ibchandler.IbchandlerRecvPacket
+	for _, log := range logs {
+		var event ibchandler.IbchandlerRecvPacket
+		if err := abiIBCHandler.UnpackIntoInterface(&event, "RecvPacket", log.Data); err != nil {
+			return nil, err
+		}
+		event.Raw = log
+		events = append(events, event)
+	}
+
+	return events, nil
+}
+
+func (chain *Chain) findWriteAckEvents(ctx core.QueryContext, fromHeight uint64) ([]ibchandler.IbchandlerWriteAcknowledgement, error) {
+	query := ethereum.FilterQuery{
+		FromBlock: big.NewInt(int64(fromHeight)),
+		ToBlock:   big.NewInt(int64(ctx.Height().GetRevisionHeight())),
+		Addresses: []common.Address{
+			chain.config.IBCAddress(),
+		},
+		Topics: [][]common.Hash{{
 			abiWriteAcknowledgement.ID,
 		}},
 	}
@@ -111,40 +183,15 @@ func (chain *Chain) findReceivedPackets(ctx core.QueryContext, fromHeight uint64
 		return nil, err
 	}
 
-	nLogs := len(logs)
-	if nLogs%2 != 0 {
-		return nil, fmt.Errorf("the number of found logs must be even number, but actually %d", nLogs)
-	}
-	var packets core.PacketInfoList
-	for i := 0; i < nLogs; i += 2 {
-		height := clienttypes.NewHeight(0, logs[i].BlockNumber)
-
-		var recvPacket ibchandler.IbchandlerRecvPacket
-		if err := abiIBCHandler.UnpackIntoInterface(&recvPacket, "RecvPacket", logs[i].Data); err != nil {
+	var events []ibchandler.IbchandlerWriteAcknowledgement
+	for _, log := range logs {
+		var event ibchandler.IbchandlerWriteAcknowledgement
+		if err := abiIBCHandler.UnpackIntoInterface(&event, "WriteAcknowledgement", log.Data); err != nil {
 			return nil, err
 		}
-
-		var writeAck ibchandler.IbchandlerWriteAcknowledgement
-		if err := abiIBCHandler.UnpackIntoInterface(&writeAck, "WriteAcknowledgement", logs[i+1].Data); err != nil {
-			return nil, err
-		}
-
-		packet := &core.PacketInfo{
-			Packet: channeltypes.NewPacket(
-				recvPacket.Packet.Data,
-				recvPacket.Packet.Sequence,
-				recvPacket.Packet.SourcePort,
-				recvPacket.Packet.SourceChannel,
-				recvPacket.Packet.DestinationPort,
-				recvPacket.Packet.DestinationChannel,
-				clienttypes.Height(recvPacket.Packet.TimeoutHeight),
-				recvPacket.Packet.TimeoutTimestamp,
-			),
-			Acknowledgement: writeAck.Acknowledgement,
-			EventHeight:     height,
-		}
-		packets = append(packets, packet)
+		event.Raw = log
+		events = append(events, event)
 	}
 
-	return packets, nil
+	return events, nil
 }
