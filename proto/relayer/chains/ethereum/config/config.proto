@@ -17,6 +17,6 @@ message ChainConfig {
 
   string ibc_address = 6;
 
-  uint64 default_send_checkpoint = 7;
-  uint64 default_recv_checkpoint = 8;
+  uint64 initial_send_checkpoint = 7;
+  uint64 initial_recv_checkpoint = 8;
 }

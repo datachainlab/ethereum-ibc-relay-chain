@@ -38,9 +38,9 @@ func (c *Chain) loadCheckpoint(cpType checkpointType) (uint64, error) {
 		if os.IsNotExist(err) {
 			switch cpType {
 			case sendCheckpoint:
-				return c.config.DefaultSendCheckpoint, nil
+				return c.config.InitialSendCheckpoint, nil
 			case recvCheckpoint:
-				return c.config.DefaultRecvCheckpoint, nil
+				return c.config.InitialRecvCheckpoint, nil
 			default:
 				panic(fmt.Sprintf("unexpected checkpoint type: %v", cpType))
 			}
