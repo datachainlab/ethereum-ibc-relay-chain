@@ -1,11 +1,11 @@
 package ethereum
 
 import (
-	"encoding/binary"
 	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"strconv"
 )
 
 type checkpointType string
@@ -46,21 +46,18 @@ func (c *Chain) loadCheckpoint(cpType checkpointType) (uint64, error) {
 			}
 		}
 		return 0, err
-	} else if len(bz) != 8 {
-		return 0, fmt.Errorf("Unexpected send checkpoint file size: %v", len(bz))
 	}
 
-	return binary.BigEndian.Uint64(bz), nil
+	return strconv.ParseUint(string(bz), 10, 64)
 }
 
 func (c *Chain) saveCheckpoint(v uint64, cpType checkpointType) error {
-	bz := make([]byte, 8)
-	binary.BigEndian.PutUint64(bz, v)
+	bz := []byte(strconv.FormatUint(v, 10))
 
 	dir, err := c.ensureDataDirectory()
 	if err != nil {
 		return err
 	}
 
-	return ioutil.WriteFile(filepath.Join(dir, checkpointFileName(cpType)), bz, os.ModePerm)
+	return os.WriteFile(filepath.Join(dir, checkpointFileName(cpType)), bz, os.ModePerm)
 }
