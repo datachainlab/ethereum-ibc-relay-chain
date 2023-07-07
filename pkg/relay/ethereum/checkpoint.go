@@ -2,7 +2,6 @@ package ethereum
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -33,7 +32,7 @@ func (c *Chain) loadCheckpoint(cpType checkpointType) (uint64, error) {
 		return 0, err
 	}
 
-	bz, err := ioutil.ReadFile(filepath.Join(dir, checkpointFileName(cpType)))
+	bz, err := os.ReadFile(filepath.Join(dir, checkpointFileName(cpType)))
 	if err != nil {
 		if os.IsNotExist(err) {
 			switch cpType {
