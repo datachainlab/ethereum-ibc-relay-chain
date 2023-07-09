@@ -2,7 +2,7 @@ module github.com/datachainlab/ethereum-ibc-relay-chain
 
 go 1.20
 
-replace github.com/hyperledger-labs/yui-relayer => github.com/siburu/yui-relayer v0.0.0-20230705064331-ffcfd9610a22
+replace github.com/hyperledger-labs/yui-relayer => github.com/siburu/yui-relayer v0.0.0-20230707142737-9980e1375724
 
 require (
 	github.com/avast/retry-go v3.0.0+incompatible
