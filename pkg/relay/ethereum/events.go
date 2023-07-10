@@ -97,11 +97,15 @@ func (chain *Chain) findReceivedPackets(ctx core.QueryContext, fromHeight uint64
 	recvPacketEvents, err := chain.findRecvPacketEvents(ctx, fromHeight)
 	if err != nil {
 		return nil, err
+	} else if len(recvPacketEvents) == 0 {
+		return nil, nil
 	}
 
 	writeAckEvents, err := chain.findWriteAckEvents(ctx, fromHeight)
 	if err != nil {
 		return nil, err
+	} else if len(writeAckEvents) == 0 {
+		return nil, nil
 	}
 
 	var packets core.PacketInfoList
