@@ -2,7 +2,6 @@ package ethereum
 
 import (
 	"context"
-	"log"
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/gogoproto/proto"
@@ -12,12 +11,16 @@ import (
 	"github.com/cosmos/ibc-go/v7/modules/core/exported"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	gethtypes "github.com/ethereum/go-ethereum/core/types"
+	"go.uber.org/zap"
 
 	"github.com/datachainlab/ethereum-ibc-relay-chain/pkg/contract/ibchandler"
+	"github.com/datachainlab/ethereum-ibc-relay-chain/pkg/logger"
 )
 
 // SendMsgs sends msgs to the chain
 func (c *Chain) SendMsgs(msgs []sdk.Msg) ([]byte, error) {
+	logger := logger.ZapLogger()
+	defer logger.Sync()
 	for _, msg := range msgs {
 		var (
 			tx  *gethtypes.Transaction
@@ -53,17 +56,20 @@ func (c *Chain) SendMsgs(msgs []sdk.Msg) ([]byte, error) {
 		// case *transfertypes.MsgTransfer:
 		// 	err = c.client.transfer(msg)
 		default:
+			logger.Error("illegal msg type", zap.Any("msg", msg))
 			panic("illegal msg type")
 		}
 		if err != nil {
+			logger.Error("ethereum: failed to send", zap.Any("msg", msg), zap.Any("tx", tx), zap.Error(err))
 			return nil, err
 		}
 		if _, err := c.client.WaitForReceiptAndGet(ctx, tx); err != nil {
+			logger.Error("ethereum: failed to send", zap.Any("msg", msg), zap.Any("tx", tx), zap.Error(err))
 			return nil, err
 		}
 		if c.msgEventListener != nil {
 			if err := c.msgEventListener.OnSentMsg([]sdk.Msg{msg}); err != nil {
-				log.Println("failed to OnSendMsg call", "msg", msg, "err", err)
+				logger.Error("failed to OnSentMsg call", zap.Any("msg", msg), zap.Error(err))
 			}
 		}
 	}
@@ -73,24 +79,31 @@ func (c *Chain) SendMsgs(msgs []sdk.Msg) ([]byte, error) {
 // Send sends msgs to the chain and logging a result of it
 // It returns a boolean value whether the result is success
 func (c *Chain) Send(msgs []sdk.Msg) bool {
+	logger := logger.ZapLogger()
+	defer logger.Sync()
 	_, err := c.SendMsgs(msgs)
 	if err != nil {
-		log.Println("ethereum: failed to send:", err)
+		logger.Error("ethereum: failed to send:", zap.Error(err))
 	}
 	return err == nil
 }
 
 func (c *Chain) TxCreateClient(opts *bind.TransactOpts, msg *clienttypes.MsgCreateClient) (*gethtypes.Transaction, error) {
+	logger := logger.ZapLogger()
+	defer logger.Sync()
 	var clientState exported.ClientState
 	if err := c.codec.UnpackAny(msg.ClientState, &clientState); err != nil {
+		logger.Error("failed to unpack client state", zap.Error(err))
 		return nil, err
 	}
 	clientStateBytes, err := proto.Marshal(msg.ClientState)
 	if err != nil {
+		logger.Error("failed to marshal client state", zap.Error(err))
 		return nil, err
 	}
 	consensusStateBytes, err := proto.Marshal(msg.ConsensusState)
 	if err != nil {
+		logger.Error("failed to marshal consensus state", zap.Error(err))
 		return nil, err
 	}
 	return c.ibcHandler.CreateClient(opts, ibchandler.IBCMsgsMsgCreateClient{
@@ -101,8 +114,11 @@ func (c *Chain) TxCreateClient(opts *bind.TransactOpts, msg *clienttypes.MsgCrea
 }
 
 func (c *Chain) TxUpdateClient(opts *bind.TransactOpts, msg *clienttypes.MsgUpdateClient) (*gethtypes.Transaction, error) {
+	logger := logger.ZapLogger()
+	defer logger.Sync()
 	headerBytes, err := proto.Marshal(msg.ClientMessage)
 	if err != nil {
+		logger.Error("failed to marshal client message", zap.Error(err))
 		return nil, err
 	}
 	return c.ibcHandler.UpdateClient(opts, ibchandler.IBCMsgsMsgUpdateClient{
@@ -124,8 +140,11 @@ func (c *Chain) TxConnectionOpenInit(opts *bind.TransactOpts, msg *conntypes.Msg
 }
 
 func (c *Chain) TxConnectionOpenTry(opts *bind.TransactOpts, msg *conntypes.MsgConnectionOpenTry) (*gethtypes.Transaction, error) {
+	logger := logger.ZapLogger()
+	defer logger.Sync()
 	clientStateBytes, err := proto.Marshal(msg.ClientState)
 	if err != nil {
+		logger.Error("failed to marshal client state", zap.Error(err))
 		return nil, err
 	}
 	var versions []ibchandler.VersionData
@@ -151,8 +170,11 @@ func (c *Chain) TxConnectionOpenTry(opts *bind.TransactOpts, msg *conntypes.MsgC
 }
 
 func (c *Chain) TxConnectionOpenAck(opts *bind.TransactOpts, msg *conntypes.MsgConnectionOpenAck) (*gethtypes.Transaction, error) {
+	logger := logger.ZapLogger()
+	defer logger.Sync()
 	clientStateBytes, err := proto.Marshal(msg.ClientState)
 	if err != nil {
+		logger.Error("failed to marshal client state", zap.Error(err))
 		return nil, err
 	}
 	return c.ibcHandler.ConnectionOpenAck(opts, ibchandler.IBCMsgsMsgConnectionOpenAck{
