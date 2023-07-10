@@ -5,9 +5,8 @@ import (
 	"math/big"
 	"strings"
 
-	clienttypes "github.com/cosmos/ibc-go/v4/modules/core/02-client/types"
-	channeltypes "github.com/cosmos/ibc-go/v4/modules/core/04-channel/types"
-	chantypes "github.com/cosmos/ibc-go/v4/modules/core/04-channel/types"
+	clienttypes "github.com/cosmos/ibc-go/v7/modules/core/02-client/types"
+	channeltypes "github.com/cosmos/ibc-go/v7/modules/core/04-channel/types"
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
@@ -35,7 +34,7 @@ func (chain *Chain) findPacket(
 	sourcePortID string,
 	sourceChannel string,
 	sequence uint64,
-) (*chantypes.Packet, error) {
+) (*channeltypes.Packet, error) {
 	channel, found, err := chain.ibcHandler.GetChannel(
 		chain.callOptsFromQueryContext(ctx),
 		sourcePortID, sourceChannel,
@@ -101,7 +100,7 @@ func (chain *Chain) getAllPackets(
 	ctx core.QueryContext,
 	sourcePortID string,
 	sourceChannel string,
-) ([]*chantypes.Packet, error) {
+) ([]*channeltypes.Packet, error) {
 	channel, found, err := chain.ibcHandler.GetChannel(
 		chain.callOptsFromQueryContext(ctx),
 		sourcePortID, sourceChannel,
@@ -127,7 +126,7 @@ func (chain *Chain) getAllPackets(
 		return nil, err
 	}
 
-	var packets []*chantypes.Packet
+	var packets []*channeltypes.Packet
 	for _, log := range logs {
 		if values, err := abiSendPacket.Inputs.Unpack(log.Data); err != nil {
 			return nil, err
