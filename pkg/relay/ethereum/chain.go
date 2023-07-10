@@ -259,7 +259,7 @@ func (c *Chain) QueryUnfinalizedRelayPackets(ctx core.QueryContext, counterparty
 
 	packets = packets.Filter(seqs)
 	if len(packets) == 0 {
-		checkpoint = ctx.Height().GetRevisionHeight()
+		checkpoint = ctx.Height().GetRevisionHeight() + 1
 	} else {
 		checkpoint = packets[0].EventHeight.GetRevisionHeight()
 	}
@@ -309,7 +309,7 @@ func (c *Chain) QueryUnfinalizedRelayAcknowledgements(ctx core.QueryContext, cou
 
 	packets = packets.Filter(seqs)
 	if len(packets) == 0 {
-		checkpoint = ctx.Height().GetRevisionHeight()
+		checkpoint = ctx.Height().GetRevisionHeight() + 1
 	} else {
 		checkpoint = packets[0].EventHeight.GetRevisionHeight()
 	}
