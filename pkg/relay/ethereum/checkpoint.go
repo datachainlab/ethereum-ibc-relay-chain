@@ -19,7 +19,7 @@ func checkpointFileName(cpType checkpointType) string {
 }
 
 func (c *Chain) ensureDataDirectory() (string, error) {
-	path := filepath.Join(c.homePath, "ethereum")
+	path := filepath.Join(c.homePath, "ethereum", c.ChainID())
 	if err := os.MkdirAll(path, os.ModePerm); err != nil {
 		return "", err
 	}
