@@ -108,12 +108,6 @@ func (chain *Chain) findReceivedPackets(ctx core.QueryContext, fromHeight uint64
 	for _, rp := range recvPacketEvents {
 		for _, wa := range writeAckEvents {
 			if rp.Packet.Sequence == wa.Sequence {
-				var height uint64
-				if rp.Raw.BlockNumber < wa.Raw.BlockNumber {
-					height = rp.Raw.BlockNumber
-				} else {
-					height = wa.Raw.BlockNumber
-				}
 				packets = append(packets, &core.PacketInfo{
 					Packet: channeltypes.Packet{
 						Sequence:           rp.Packet.Sequence,
@@ -126,7 +120,7 @@ func (chain *Chain) findReceivedPackets(ctx core.QueryContext, fromHeight uint64
 						TimeoutTimestamp:   rp.Packet.TimeoutTimestamp,
 					},
 					Acknowledgement: wa.Acknowledgement,
-					EventHeight:     clienttypes.NewHeight(0, height),
+					EventHeight:     clienttypes.NewHeight(0, rp.Raw.BlockNumber),
 				})
 				break
 			}
