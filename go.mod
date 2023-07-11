@@ -2,8 +2,6 @@ module github.com/datachainlab/ethereum-ibc-relay-chain
 
 go 1.20
 
-replace github.com/hyperledger-labs/yui-relayer => github.com/siburu/yui-relayer v0.0.0-20230707142737-9980e1375724
-
 require (
 	github.com/avast/retry-go v3.0.0+incompatible
 	github.com/btcsuite/btcd v0.23.4
@@ -12,7 +10,7 @@ require (
 	github.com/cosmos/gogoproto v1.4.10
 	github.com/cosmos/ibc-go/v7 v7.2.0
 	github.com/ethereum/go-ethereum v1.12.0
-	github.com/hyperledger-labs/yui-relayer v0.4.1
+	github.com/hyperledger-labs/yui-relayer v0.4.2
 	github.com/spf13/cobra v1.7.0
 	github.com/stretchr/testify v1.8.4
 	github.com/tyler-smith/go-bip39 v1.1.0
