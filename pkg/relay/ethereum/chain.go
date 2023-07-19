@@ -251,54 +251,8 @@ func (c *Chain) QueryChannel(ctx core.QueryContext) (chanRes *chantypes.QueryCha
 	return chantypes.NewQueryChannelResponse(channelToPB(chann), nil, ctx.Height().(clienttypes.Height)), nil
 }
 
-// QueryPacketCommitment returns the packet commitment corresponding to a given sequence
-func (c *Chain) QueryPacketCommitment(ctx core.QueryContext, seq uint64) (comRes *chantypes.QueryPacketCommitmentResponse, err error) {
-	logger := logger.ZapLogger()
-	defer logger.Sync()
-	packet, err := c.QueryPacket(ctx, seq)
-	if err != nil {
-		logger.Error("failed to get packet", zap.Error(err))
-		return nil, err
-	}
-	commitment := chantypes.CommitPacket(c.Codec(), packet)
-	return chantypes.NewQueryPacketCommitmentResponse(commitment, nil, ctx.Height().(clienttypes.Height)), nil
-}
-
-// QueryPacketAcknowledgementCommitment returns the acknowledgement corresponding to a given sequence
-func (c *Chain) QueryPacketAcknowledgementCommitment(ctx core.QueryContext, seq uint64) (ackRes *chantypes.QueryPacketAcknowledgementResponse, err error) {
-	logger := logger.ZapLogger()
-	defer logger.Sync()
-	ack, err := c.QueryPacketAcknowledgement(ctx, seq)
-	if err != nil {
-		logger.Error("failed to get packet acknowledgement", zap.Error(err))
-		return nil, err
-	}
-	commitment := chantypes.CommitAcknowledgement(ack)
-	return chantypes.NewQueryPacketAcknowledgementResponse(commitment, nil, ctx.Height().(clienttypes.Height)), nil
-}
-
-// NOTE: The current implementation returns all packets, including those for that acknowledgement has already received.
-// QueryPacketCommitments returns an array of packet commitments
-func (c *Chain) QueryPacketCommitments(ctx core.QueryContext, offset uint64, limit uint64) (comRes *chantypes.QueryPacketCommitmentsResponse, err error) {
-	logger := logger.ZapLogger()
-	defer logger.Sync()
-	// WARNING: It may be slow to use in the production. Instead of it, it might be better to use an external event indexer to get all packet commitments.
-	packets, err := c.getAllPackets(ctx, c.pathEnd.PortID, c.pathEnd.ChannelID)
-	if err != nil {
-		logger.Error("failed to get all packets", zap.Error(err))
-		return nil, err
-	}
-	var res chantypes.QueryPacketCommitmentsResponse
-	for _, p := range packets {
-		ps := chantypes.NewPacketState(c.pathEnd.PortID, c.pathEnd.ChannelID, p.Sequence, chantypes.CommitPacket(c.Codec(), p))
-		res.Commitments = append(res.Commitments, &ps)
-	}
-	res.Height = ctx.Height().(clienttypes.Height)
-	return &res, nil
-}
-
-// QueryUnrecievedPackets returns a list of unrelayed packet commitments
-func (c *Chain) QueryUnrecievedPackets(ctx core.QueryContext, seqs []uint64) ([]uint64, error) {
+// QueryUnreceivedPackets returns a list of unrelayed packet commitments
+func (c *Chain) QueryUnreceivedPackets(ctx core.QueryContext, seqs []uint64) ([]uint64, error) {
 	logger := logger.ZapLogger()
 	defer logger.Sync()
 	var ret []uint64
@@ -314,26 +268,47 @@ func (c *Chain) QueryUnrecievedPackets(ctx core.QueryContext, seqs []uint64) ([]
 	return ret, nil
 }
 
-// QueryPacketAcknowledgementCommitments returns an array of packet acks
-func (c *Chain) QueryPacketAcknowledgementCommitments(ctx core.QueryContext, offset uint64, limit uint64) (comRes *chantypes.QueryPacketAcknowledgementsResponse, err error) {
+// QueryUnfinalizedRelayedPackets returns packets and heights that are sent but not received at the latest finalized block on the counterparty chain
+func (c *Chain) QueryUnfinalizedRelayPackets(ctx core.QueryContext, counterparty core.LightClientICS04Querier) (core.PacketInfoList, error) {
 	logger := logger.ZapLogger()
 	defer logger.Sync()
-	// WARNING: It may be slow to use in the production. Instead of it, it might be better to use an external event indexer to get all packet acknowledgements.
-	acks, err := c.getAllAcknowledgements(ctx, c.pathEnd.PortID, c.pathEnd.ChannelID)
+	checkpoint, err := c.loadCheckpoint(sendCheckpoint)
 	if err != nil {
 		logger.Error("failed to get all acknowledgements", zap.Error(err))
 		return nil, err
 	}
-	var res chantypes.QueryPacketAcknowledgementsResponse
-	for _, a := range acks {
-		ps := chantypes.NewPacketState(c.pathEnd.PortID, c.pathEnd.ChannelID, a.Sequence, chantypes.CommitAcknowledgement(a.Data))
-		res.Acknowledgements = append(res.Acknowledgements, &ps)
+
+	packets, err := c.findSentPackets(ctx, checkpoint)
+	if err != nil {
+		return nil, err
 	}
-	return &res, nil
+
+	counterpartyHeader, err := counterparty.GetLatestFinalizedHeader()
+	if err != nil {
+		return nil, err
+	}
+
+	counterpartyCtx := core.NewQueryContext(context.TODO(), counterpartyHeader.GetHeight())
+	seqs, err := counterparty.QueryUnreceivedPackets(counterpartyCtx, packets.ExtractSequenceList())
+	if err != nil {
+		return nil, err
+	}
+
+	packets = packets.Filter(seqs)
+	if len(packets) == 0 {
+		checkpoint = ctx.Height().GetRevisionHeight() + 1
+	} else {
+		checkpoint = packets[0].EventHeight.GetRevisionHeight()
+	}
+	if err := c.saveCheckpoint(checkpoint, sendCheckpoint); err != nil {
+		return nil, err
+	}
+
+	return packets, nil
 }
 
-// QueryUnrecievedAcknowledgements returns a list of unrelayed packet acks
-func (c *Chain) QueryUnrecievedAcknowledgements(ctx core.QueryContext, seqs []uint64) ([]uint64, error) {
+// QueryUnreceivedAcknowledgements returns a list of unrelayed packet acks
+func (c *Chain) QueryUnreceivedAcknowledgements(ctx core.QueryContext, seqs []uint64) ([]uint64, error) {
 	logger := logger.ZapLogger()
 	defer logger.Sync()
 	var ret []uint64
@@ -349,14 +324,40 @@ func (c *Chain) QueryUnrecievedAcknowledgements(ctx core.QueryContext, seqs []ui
 	return ret, nil
 }
 
-// QueryPacket returns the packet corresponding to a sequence
-func (c *Chain) QueryPacket(ctx core.QueryContext, sequence uint64) (*chantypes.Packet, error) {
-	return c.findPacket(ctx, c.pathEnd.PortID, c.pathEnd.ChannelID, sequence)
-}
+// QueryUnfinalizedRelayedAcknowledgements returns acks and heights that are sent but not received at the latest finalized block on the counterpartychain
+func (c *Chain) QueryUnfinalizedRelayAcknowledgements(ctx core.QueryContext, counterparty core.LightClientICS04Querier) (core.PacketInfoList, error) {
+	checkpoint, err := c.loadCheckpoint(recvCheckpoint)
+	if err != nil {
+		return nil, err
+	}
 
-// QueryPacketAcknowledgement returns the acknowledgement corresponding to a sequence
-func (c *Chain) QueryPacketAcknowledgement(ctx core.QueryContext, sequence uint64) ([]byte, error) {
-	return c.findAcknowledgement(ctx, c.pathEnd.PortID, c.pathEnd.ChannelID, sequence)
+	packets, err := c.findReceivedPackets(ctx, checkpoint)
+	if err != nil {
+		return nil, err
+	}
+
+	counterpartyHeader, err := counterparty.GetLatestFinalizedHeader()
+	if err != nil {
+		return nil, err
+	}
+
+	counterpartyCtx := core.NewQueryContext(context.TODO(), counterpartyHeader.GetHeight())
+	seqs, err := counterparty.QueryUnreceivedAcknowledgements(counterpartyCtx, packets.ExtractSequenceList())
+	if err != nil {
+		return nil, err
+	}
+
+	packets = packets.Filter(seqs)
+	if len(packets) == 0 {
+		checkpoint = ctx.Height().GetRevisionHeight() + 1
+	} else {
+		checkpoint = packets[0].EventHeight.GetRevisionHeight()
+	}
+	if err := c.saveCheckpoint(checkpoint, recvCheckpoint); err != nil {
+		return nil, err
+	}
+
+	return packets, nil
 }
 
 // QueryBalance returns the amount of coins in the relayer account
