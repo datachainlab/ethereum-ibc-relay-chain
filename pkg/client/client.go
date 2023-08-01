@@ -74,7 +74,7 @@ func (cl *ETHClient) GetTransactionReceipt(ctx context.Context, txHash common.Ha
 		if enableDebugTrace {
 			to, revertReason, err := cl.DebugTraceTransaction(ctx, txHash)
 			if err != nil {
-				return &r.Receipt, false, fmt.Errorf("%s: %v, debug_transaction error: %v", errPrefix, r, err)
+				return &r.Receipt, false, fmt.Errorf("%s: %v, txHash: %s, debug_transaction error: %v", errPrefix, r, txHash, err)
 			}
 			return &r.Receipt, false, fmt.Errorf("%s: %v, contract: %s, txHash: %s, revertReason: %v", errPrefix, r, to, txHash, revertReason)
 		} else {
