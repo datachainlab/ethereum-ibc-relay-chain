@@ -76,7 +76,7 @@ func (cl *ETHClient) GetTransactionReceipt(ctx context.Context, txHash common.Ha
 			if err != nil {
 				return &r.Receipt, false, fmt.Errorf("%s: %v, debug_transaction error: %v", errPrefix, r, err)
 			}
-			return &r.Receipt, false, fmt.Errorf("%s: %v, contract: %s, revert reason: %v", errPrefix, r, to, revertReason)
+			return &r.Receipt, false, fmt.Errorf("%s: %v, contract: %s, txHash: %s, revertReason: %v", errPrefix, r, to, txHash, revertReason)
 		} else {
 			return &r.Receipt, false, fmt.Errorf("%s: %v", errPrefix, r)
 		}
@@ -111,13 +111,9 @@ func (cl *ETHClient) DebugTraceTransaction(ctx context.Context, txHash common.Ha
 	if err := cl.rpcClient.CallContext(ctx, &result, "debug_traceTransaction", txHash, map[string]string{"tracer": "callTracer"}); err != nil {
 		return "", "", err
 	}
-	var to string
-	var revertReason string
-	if result.RevertReason != nil {
-		to = *result.To
-		revertReason = *result.RevertReason
-	} else {
-		to, revertReason = searchToAndReason(*result.To, result.Calls)
+	to, revertReason, err := searchToAndReason(result)
+	if err != nil {
+		return "", "", err
 	}
 	return to, revertReason, nil
 }
@@ -166,15 +162,15 @@ type Result struct {
 	Calls        []Result `json:"calls"`
 }
 
-func searchToAndReason(to string, calls []Result) (string, string) {
-	for _, call := range calls {
-		if call.To != nil {
-			to = *call.To
-		}
-		if call.RevertReason != nil {
-			return to, *call.RevertReason
-		}
-		searchToAndReason(to, call.Calls)
+func searchToAndReason(result *Result) (string, string, error) {
+	if result.RevertReason != nil {
+		return *result.To, *result.RevertReason, nil
 	}
-	return to, "Revert reason not exists"
+	for _, call := range result.Calls {
+		to, reason, err := searchToAndReason(&call)
+		if err == nil {
+			return to, reason, nil
+		}
+	}
+	return "", "", fmt.Errorf("revert reason not found")
 }
