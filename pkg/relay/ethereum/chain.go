@@ -16,9 +16,11 @@ import (
 	committypes "github.com/cosmos/ibc-go/v7/modules/core/23-commitment/types"
 	ibcexported "github.com/cosmos/ibc-go/v7/modules/core/exported"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
+	"go.uber.org/zap"
 
 	"github.com/datachainlab/ethereum-ibc-relay-chain/pkg/client"
 	"github.com/datachainlab/ethereum-ibc-relay-chain/pkg/contract/ibchandler"
+	"github.com/datachainlab/ethereum-ibc-relay-chain/pkg/logger"
 	"github.com/datachainlab/ethereum-ibc-relay-chain/pkg/wallet"
 	"github.com/hyperledger-labs/yui-relayer/core"
 )
@@ -40,17 +42,22 @@ type Chain struct {
 var _ core.Chain = (*Chain)(nil)
 
 func NewChain(config ChainConfig) (*Chain, error) {
+	logger := logger.ZapLogger()
+	defer logger.Sync()
 	id := big.NewInt(config.EthChainId)
 	client, err := client.NewETHClient(config.RpcAddr)
 	if err != nil {
+		logger.Error("failed to create ethereum client", zap.Error(err))
 		return nil, err
 	}
 	key, err := wallet.GetPrvKeyFromMnemonicAndHDWPath(config.HdwMnemonic, config.HdwPath)
 	if err != nil {
+		logger.Error("failed to get private key", zap.Error(err))
 		return nil, err
 	}
 	ibcHandler, err := ibchandler.NewIbchandler(config.IBCAddress(), client)
 	if err != nil {
+		logger.Error("failed to create ibchandler", zap.Error(err))
 		return nil, err
 	}
 	return &Chain{
@@ -87,8 +94,11 @@ func (c *Chain) ChainID() string {
 
 // GetLatestHeight gets the chain for the latest height and returns it
 func (c *Chain) LatestHeight() (ibcexported.Height, error) {
+	logger := logger.ZapLogger()
+	defer logger.Sync()
 	bn, err := c.client.BlockNumber(context.TODO())
 	if err != nil {
+		logger.Error("failed to get block number", zap.Error(err))
 		return nil, err
 	}
 	return clienttypes.NewHeight(0, bn), nil
@@ -112,7 +122,10 @@ func (c *Chain) Client() *client.ETHClient {
 
 // SetRelayInfo sets source's path and counterparty's info to the chain
 func (c *Chain) SetRelayInfo(p *core.PathEnd, _ *core.ProvableChain, _ *core.PathEnd) error {
+	logger := logger.ZapLogger()
+	defer logger.Sync()
 	if err := p.Validate(); err != nil {
+		logger.Error("failed to validate path", zap.Error(err))
 		return fmt.Errorf("path on chain %s failed to set: %w", c.ChainID(), err)
 	}
 	c.pathEnd = p
@@ -130,18 +143,24 @@ func (c *Chain) RegisterMsgEventListener(listener core.MsgEventListener) {
 
 // QueryClientConsensusState retrevies the latest consensus state for a client in state at a given height
 func (c *Chain) QueryClientConsensusState(ctx core.QueryContext, dstClientConsHeight ibcexported.Height) (*clienttypes.QueryConsensusStateResponse, error) {
+	logger := logger.ZapLogger()
+	defer logger.Sync()
 	s, found, err := c.ibcHandler.GetConsensusState(c.callOptsFromQueryContext(ctx), c.pathEnd.ClientID, pbToHostHeight(dstClientConsHeight))
 	if err != nil {
+		logger.Error("failed to get consensus state", zap.Error(err))
 		return nil, err
 	} else if !found {
+		logger.Error("client consensus not found", zap.String("client-id", c.pathEnd.ClientID))
 		return nil, fmt.Errorf("client consensus not found: %v", c.pathEnd.ClientID)
 	}
 	var consensusState ibcexported.ConsensusState
 	if err := c.Codec().UnmarshalInterface(s, &consensusState); err != nil {
+		logger.Error("failed to unmarshal consensus state", zap.Error(err))
 		return nil, err
 	}
 	any, err := clienttypes.PackConsensusState(consensusState)
 	if err != nil {
+		logger.Error("failed to pack consensus state", zap.Error(err))
 		return nil, err
 	}
 	return clienttypes.NewQueryConsensusStateResponse(any, nil, ctx.Height().(clienttypes.Height)), nil
@@ -150,18 +169,24 @@ func (c *Chain) QueryClientConsensusState(ctx core.QueryContext, dstClientConsHe
 // QueryClientState returns the client state of dst chain
 // height represents the height of dst chain
 func (c *Chain) QueryClientState(ctx core.QueryContext) (*clienttypes.QueryClientStateResponse, error) {
+	logger := logger.ZapLogger()
+	defer logger.Sync()
 	s, found, err := c.ibcHandler.GetClientState(c.callOptsFromQueryContext(ctx), c.pathEnd.ClientID)
 	if err != nil {
+		logger.Error("failed to get client state", zap.Error(err))
 		return nil, err
 	} else if !found {
+		logger.Error("client not found", zap.String("client-id", c.pathEnd.ClientID))
 		return nil, fmt.Errorf("client not found: %v", c.pathEnd.ClientID)
 	}
 	var clientState ibcexported.ClientState
 	if err := c.Codec().UnmarshalInterface(s, &clientState); err != nil {
+		logger.Error("failed to unmarshal client state", zap.Error(err))
 		return nil, err
 	}
 	any, err := clienttypes.PackClientState(clientState)
 	if err != nil {
+		logger.Error("failed to pack client state", zap.Error(err))
 		return nil, err
 	}
 	return clienttypes.NewQueryClientStateResponse(any, nil, ctx.Height().(clienttypes.Height)), nil
@@ -185,8 +210,11 @@ var emptyConnRes = conntypes.NewQueryConnectionResponse(
 
 // QueryConnection returns the remote end of a given connection
 func (c *Chain) QueryConnection(ctx core.QueryContext) (*conntypes.QueryConnectionResponse, error) {
+	logger := logger.ZapLogger()
+	defer logger.Sync()
 	conn, found, err := c.ibcHandler.GetConnection(c.callOptsFromQueryContext(ctx), c.pathEnd.ConnectionID)
 	if err != nil {
+		logger.Error("failed to get connection", zap.Error(err))
 		return nil, err
 	} else if !found {
 		return emptyConnRes, nil
@@ -211,8 +239,11 @@ var emptyChannelRes = chantypes.NewQueryChannelResponse(
 
 // QueryChannel returns the channel associated with a channelID
 func (c *Chain) QueryChannel(ctx core.QueryContext) (chanRes *chantypes.QueryChannelResponse, err error) {
+	logger := logger.ZapLogger()
+	defer logger.Sync()
 	chann, found, err := c.ibcHandler.GetChannel(c.callOptsFromQueryContext(ctx), c.pathEnd.PortID, c.pathEnd.ChannelID)
 	if err != nil {
+		logger.Error("failed to get channel", zap.Error(err))
 		return nil, err
 	} else if !found {
 		return emptyChannelRes, nil
@@ -222,10 +253,13 @@ func (c *Chain) QueryChannel(ctx core.QueryContext) (chanRes *chantypes.QueryCha
 
 // QueryUnreceivedPackets returns a list of unrelayed packet commitments
 func (c *Chain) QueryUnreceivedPackets(ctx core.QueryContext, seqs []uint64) ([]uint64, error) {
+	logger := logger.ZapLogger()
+	defer logger.Sync()
 	var ret []uint64
 	for _, seq := range seqs {
 		found, err := c.ibcHandler.HasPacketReceipt(c.callOptsFromQueryContext(ctx), c.pathEnd.PortID, c.pathEnd.ChannelID, seq)
 		if err != nil {
+			logger.Error("failed to get packet receipt", zap.Error(err))
 			return nil, err
 		} else if !found {
 			ret = append(ret, seq)
@@ -236,8 +270,11 @@ func (c *Chain) QueryUnreceivedPackets(ctx core.QueryContext, seqs []uint64) ([]
 
 // QueryUnfinalizedRelayedPackets returns packets and heights that are sent but not received at the latest finalized block on the counterparty chain
 func (c *Chain) QueryUnfinalizedRelayPackets(ctx core.QueryContext, counterparty core.LightClientICS04Querier) (core.PacketInfoList, error) {
+	logger := logger.ZapLogger()
+	defer logger.Sync()
 	checkpoint, err := c.loadCheckpoint(sendCheckpoint)
 	if err != nil {
+		logger.Error("failed to get all acknowledgements", zap.Error(err))
 		return nil, err
 	}
 
@@ -272,10 +309,13 @@ func (c *Chain) QueryUnfinalizedRelayPackets(ctx core.QueryContext, counterparty
 
 // QueryUnreceivedAcknowledgements returns a list of unrelayed packet acks
 func (c *Chain) QueryUnreceivedAcknowledgements(ctx core.QueryContext, seqs []uint64) ([]uint64, error) {
+	logger := logger.ZapLogger()
+	defer logger.Sync()
 	var ret []uint64
 	for _, seq := range seqs {
 		_, found, err := c.ibcHandler.GetHashedPacketCommitment(c.callOptsFromQueryContext(ctx), c.pathEnd.PortID, c.pathEnd.ChannelID, seq)
 		if err != nil {
+			logger.Error("failed to get packet commitment", zap.Error(err))
 			return nil, err
 		} else if found {
 			ret = append(ret, seq)

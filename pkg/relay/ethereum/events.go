@@ -10,8 +10,10 @@ import (
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
+	"go.uber.org/zap"
 
 	"github.com/datachainlab/ethereum-ibc-relay-chain/pkg/contract/ibchandler"
+	"github.com/datachainlab/ethereum-ibc-relay-chain/pkg/logger"
 	"github.com/hyperledger-labs/yui-relayer/core"
 )
 
@@ -35,6 +37,8 @@ func init() {
 }
 
 func (chain *Chain) findSentPackets(ctx core.QueryContext, fromHeight uint64) (core.PacketInfoList, error) {
+	logger := logger.ZapLogger()
+	defer logger.Sync()
 	var dstPortID, dstChannelID string
 	if channel, found, err := chain.ibcHandler.GetChannel(
 		chain.callOptsFromQueryContext(ctx),
@@ -62,6 +66,7 @@ func (chain *Chain) findSentPackets(ctx core.QueryContext, fromHeight uint64) (c
 
 	logs, err := chain.client.FilterLogs(ctx.Context(), query)
 	if err != nil {
+		logger.Error("failed to filter logs", zap.Error(err))
 		return nil, err
 	}
 
@@ -94,8 +99,11 @@ func (chain *Chain) findSentPackets(ctx core.QueryContext, fromHeight uint64) (c
 }
 
 func (chain *Chain) findReceivedPackets(ctx core.QueryContext, fromHeight uint64) (core.PacketInfoList, error) {
+	logger := logger.ZapLogger()
+	defer logger.Sync()
 	recvPacketEvents, err := chain.findRecvPacketEvents(ctx, fromHeight)
 	if err != nil {
+		logger.Error("failed to filter logs", zap.Error(err))
 		return nil, err
 	} else if len(recvPacketEvents) == 0 {
 		return nil, nil
@@ -103,6 +111,7 @@ func (chain *Chain) findReceivedPackets(ctx core.QueryContext, fromHeight uint64
 
 	writeAckEvents, err := chain.findWriteAckEvents(ctx, recvPacketEvents[0].Raw.BlockNumber)
 	if err != nil {
+		logger.Error("failed to filter logs", zap.Error(err))
 		return nil, err
 	} else if len(writeAckEvents) == 0 {
 		return nil, nil
