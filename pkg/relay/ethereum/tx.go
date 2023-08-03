@@ -58,7 +58,7 @@ func (c *Chain) SendMsgs(msgs []sdk.Msg) ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
-		if _, err := c.client.WaitForReceiptAndGet(ctx, tx); err != nil {
+		if _, err := c.client.WaitForReceiptAndGet(ctx, tx, c.config.EnableDebugTrace); err != nil {
 			return nil, err
 		}
 		if c.msgEventListener != nil {
