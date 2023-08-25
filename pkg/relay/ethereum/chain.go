@@ -94,6 +94,15 @@ func (c *Chain) LatestHeight() (ibcexported.Height, error) {
 	return clienttypes.NewHeight(0, bn), nil
 }
 
+func (c *Chain) Timestamp(height ibcexported.Height) (time.Time, error) {
+	ht := big.NewInt(int64(height.GetRevisionHeight()))
+	if header, err := c.client.HeaderByNumber(context.TODO(), ht); err != nil {
+		return time.Time{}, err
+	} else {
+		return time.Unix(int64(header.Time), 0), nil
+	}
+}
+
 // GetAddress returns the address of relayer
 func (c *Chain) GetAddress() (sdk.AccAddress, error) {
 	addr := make([]byte, 20)
