@@ -99,7 +99,7 @@ func (c *Chain) Timestamp(height ibcexported.Height) (time.Time, error) {
 	if header, err := c.client.HeaderByNumber(context.TODO(), ht); err != nil {
 		return time.Time{}, err
 	} else {
-		return time.Unix(int64(header.Time), 0), err
+		return time.Unix(int64(header.Time), 0), nil
 	}
 }
 
