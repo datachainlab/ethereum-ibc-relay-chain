@@ -21,4 +21,7 @@ message ChainConfig {
   uint64 initial_recv_checkpoint = 8;
 
   bool enable_debug_trace = 9;
+
+  uint64 average_block_time_msec = 10;
+  uint64 max_retry_for_inclusion = 11;
 }

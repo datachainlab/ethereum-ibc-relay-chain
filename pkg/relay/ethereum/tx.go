@@ -2,6 +2,7 @@ package ethereum
 
 import (
 	"context"
+	"fmt"
 	"log"
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
@@ -12,13 +13,15 @@ import (
 	"github.com/cosmos/ibc-go/v7/modules/core/exported"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	gethtypes "github.com/ethereum/go-ethereum/core/types"
+	"github.com/hyperledger-labs/yui-relayer/core"
 
 	"github.com/datachainlab/ethereum-ibc-relay-chain/pkg/contract/ibchandler"
 )
 
 // SendMsgs sends msgs to the chain
-func (c *Chain) SendMsgs(msgs []sdk.Msg) ([]byte, error) {
-	for _, msg := range msgs {
+func (c *Chain) SendMsgs(msgs []sdk.Msg) ([]core.MsgID, error) {
+	var msgIDs []core.MsgID
+	for i, msg := range msgs {
 		var (
 			tx  *gethtypes.Transaction
 			err error
@@ -58,26 +61,33 @@ func (c *Chain) SendMsgs(msgs []sdk.Msg) ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
-		if _, err := c.client.WaitForReceiptAndGet(ctx, tx, c.config.EnableDebugTrace); err != nil {
+		if receipt, revertReason, err := c.client.WaitForReceiptAndGet(ctx, tx.Hash(), c.config.EnableDebugTrace); err != nil {
 			return nil, err
+		} else if receipt.Status == gethtypes.ReceiptStatusFailed {
+			return nil, fmt.Errorf("tx execution failed: revertReason=%s, msgIndex=%d, msg=%v", revertReason, i, msg)
 		}
 		if c.msgEventListener != nil {
 			if err := c.msgEventListener.OnSentMsg([]sdk.Msg{msg}); err != nil {
 				log.Println("failed to OnSendMsg call", "msg", msg, "err", err)
 			}
 		}
+		msgIDs = append(msgIDs, &MsgID{txHash: tx.Hash()})
 	}
-	return nil, nil
+	return msgIDs, nil
 }
 
-// Send sends msgs to the chain and logging a result of it
-// It returns a boolean value whether the result is success
-func (c *Chain) Send(msgs []sdk.Msg) bool {
-	_, err := c.SendMsgs(msgs)
-	if err != nil {
-		log.Println("ethereum: failed to send:", err)
+func (c *Chain) GetMsgResult(id core.MsgID) (core.MsgResult, error) {
+	msgID, ok := id.(*MsgID)
+	if !ok {
+		return nil, fmt.Errorf("unexpected message id type: %T", id)
 	}
-	return err == nil
+
+	receipt, revertReason, err := c.client.WaitForReceiptAndGet(context.TODO(), msgID.txHash, c.config.EnableDebugTrace)
+	if err != nil {
+		return nil, err
+	}
+
+	return c.makeMsgResultFromReceipt(receipt, revertReason)
 }
 
 func (c *Chain) TxCreateClient(opts *bind.TransactOpts, msg *clienttypes.MsgCreateClient) (*gethtypes.Transaction, error) {

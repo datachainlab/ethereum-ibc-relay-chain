@@ -3,7 +3,6 @@ package ethereum
 import (
 	"fmt"
 	"math/big"
-	"strings"
 
 	clienttypes "github.com/cosmos/ibc-go/v7/modules/core/02-client/types"
 	channeltypes "github.com/cosmos/ibc-go/v7/modules/core/04-channel/types"
@@ -16,22 +15,28 @@ import (
 )
 
 var (
-	abiIBCHandler abi.ABI
-
+	abiGeneratedClientIdentifier,
+	abiGeneratedConnectionIdentifier,
+	abiGeneratedChannelIdentifier,
 	abiSendPacket,
 	abiRecvPacket,
-	abiWriteAcknowledgement abi.Event
+	abiWriteAcknowledgement,
+	abiAcknowledgePacket abi.Event
 )
 
 func init() {
-	var err error
-	abiIBCHandler, err = abi.JSON(strings.NewReader(ibchandler.IbchandlerABI))
+	abiIBCHandler, err := ibchandler.IbchandlerMetaData.GetAbi()
 	if err != nil {
 		panic(err)
 	}
+	abiGeneratedClientIdentifier = abiIBCHandler.Events["GeneratedClientIdentifier"]
+	abiGeneratedConnectionIdentifier = abiIBCHandler.Events["GeneratedConnectionIdentifier"]
+	abiGeneratedChannelIdentifier = abiIBCHandler.Events["GeneratedChannelIdentifier"]
 	abiSendPacket = abiIBCHandler.Events["SendPacket"]
 	abiRecvPacket = abiIBCHandler.Events["RecvPacket"]
 	abiWriteAcknowledgement = abiIBCHandler.Events["WriteAcknowledgement"]
+	abiAcknowledgePacket = abiIBCHandler.Events["AcknowledgePacket"]
+
 }
 
 func (chain *Chain) findSentPackets(ctx core.QueryContext, fromHeight uint64) (core.PacketInfoList, error) {
@@ -69,9 +74,9 @@ func (chain *Chain) findSentPackets(ctx core.QueryContext, fromHeight uint64) (c
 	for _, log := range logs {
 		height := clienttypes.NewHeight(0, log.BlockNumber)
 
-		var sendPacket ibchandler.IbchandlerSendPacket
-		if err := abiIBCHandler.UnpackIntoInterface(&sendPacket, "SendPacket", log.Data); err != nil {
-			return nil, err
+		sendPacket, err := chain.ibcHandler.ParseSendPacket(log)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse SendPacket event: err=%v, log=%v", err, log)
 		}
 
 		packet := &core.PacketInfo{
@@ -134,7 +139,7 @@ func (chain *Chain) findReceivedPackets(ctx core.QueryContext, fromHeight uint64
 	return packets, nil
 }
 
-func (chain *Chain) findRecvPacketEvents(ctx core.QueryContext, fromHeight uint64) ([]ibchandler.IbchandlerRecvPacket, error) {
+func (chain *Chain) findRecvPacketEvents(ctx core.QueryContext, fromHeight uint64) ([]*ibchandler.IbchandlerRecvPacket, error) {
 	query := ethereum.FilterQuery{
 		FromBlock: big.NewInt(int64(fromHeight)),
 		ToBlock:   big.NewInt(int64(ctx.Height().GetRevisionHeight())),
@@ -151,20 +156,19 @@ func (chain *Chain) findRecvPacketEvents(ctx core.QueryContext, fromHeight uint6
 		return nil, err
 	}
 
-	var events []ibchandler.IbchandlerRecvPacket
+	var events []*ibchandler.IbchandlerRecvPacket
 	for _, log := range logs {
-		var event ibchandler.IbchandlerRecvPacket
-		if err := abiIBCHandler.UnpackIntoInterface(&event, "RecvPacket", log.Data); err != nil {
-			return nil, err
+		event, err := chain.ibcHandler.ParseRecvPacket(log)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse RecvPacket event: err=%v, log=%v", err, log)
 		}
-		event.Raw = log
 		events = append(events, event)
 	}
 
 	return events, nil
 }
 
-func (chain *Chain) findWriteAckEvents(ctx core.QueryContext, fromHeight uint64) ([]ibchandler.IbchandlerWriteAcknowledgement, error) {
+func (chain *Chain) findWriteAckEvents(ctx core.QueryContext, fromHeight uint64) ([]*ibchandler.IbchandlerWriteAcknowledgement, error) {
 	query := ethereum.FilterQuery{
 		FromBlock: big.NewInt(int64(fromHeight)),
 		ToBlock:   big.NewInt(int64(ctx.Height().GetRevisionHeight())),
@@ -181,13 +185,12 @@ func (chain *Chain) findWriteAckEvents(ctx core.QueryContext, fromHeight uint64)
 		return nil, err
 	}
 
-	var events []ibchandler.IbchandlerWriteAcknowledgement
+	var events []*ibchandler.IbchandlerWriteAcknowledgement
 	for _, log := range logs {
-		var event ibchandler.IbchandlerWriteAcknowledgement
-		if err := abiIBCHandler.UnpackIntoInterface(&event, "WriteAcknowledgement", log.Data); err != nil {
-			return nil, err
+		event, err := chain.ibcHandler.ParseWriteAcknowledgement(log)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse WriteAcknowledgement event: err=%v, log=%v", err, log)
 		}
-		event.Raw = log
 		events = append(events, event)
 	}
 
