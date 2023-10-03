@@ -86,6 +86,9 @@ func (cl *ETHClient) GetTransactionReceipt(ctx context.Context, txHash common.Ha
 		}
 		return &r.Receipt, reason, nil
 	} else {
+		// TODO: use more proper logger
+		logger := log.GetLogger().WithModule("ethereum.chain")
+		logger.Info("tx execution failed but the reason couldn't be obtained", "tx_hash", txHash.Hex())
 		return &r.Receipt, "", nil
 	}
 }
