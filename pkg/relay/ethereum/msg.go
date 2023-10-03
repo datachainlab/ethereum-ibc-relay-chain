@@ -63,75 +63,80 @@ func (c *Chain) parseMsgEventLogs(logs []*types.Log) ([]core.MsgEventLog, error)
 		if len(log.Topics) == 0 {
 			return nil, fmt.Errorf("log has no topic: logIndex=%d, log=%v", i, log)
 		}
+
+		var event core.MsgEventLog
 		switch log.Topics[0] {
 		case abiGeneratedClientIdentifier.ID:
 			ev, err := c.ibcHandler.ParseGeneratedClientIdentifier(*log)
 			if err != nil {
 				return nil, fmt.Errorf("failed to parse GeneratedClientIdentifier event: logIndex=%d, log=%v", i, log)
 			}
-			events = append(events, &core.EventGenerateClientIdentifier{ID: ev.Arg0})
+			event = &core.EventGenerateClientIdentifier{ID: ev.Arg0}
 		case abiGeneratedConnectionIdentifier.ID:
 			ev, err := c.ibcHandler.ParseGeneratedConnectionIdentifier(*log)
 			if err != nil {
 				return nil, fmt.Errorf("failed to parse GeneratedConnectionIdentifier event: logIndex=%d, log=%v", i, log)
 			}
-			events = append(events, &core.EventGenerateConnectionIdentifier{ID: ev.Arg0})
+			event = &core.EventGenerateConnectionIdentifier{ID: ev.Arg0}
 		case abiGeneratedChannelIdentifier.ID:
 			ev, err := c.ibcHandler.ParseGeneratedChannelIdentifier(*log)
 			if err != nil {
 				return nil, fmt.Errorf("failed to parse GeneratedChannelIdentifier event: logIndex=%d, log=%v", i, log)
 			}
-			events = append(events, &core.EventGenerateChannelIdentifier{ID: ev.Arg0})
+			event = &core.EventGenerateChannelIdentifier{ID: ev.Arg0}
 		case abiSendPacket.ID:
 			ev, err := c.ibcHandler.ParseSendPacket(*log)
 			if err != nil {
 				return nil, fmt.Errorf("failed to parse SendPacket event: logIndex=%d, log=%v", i, log)
 			}
-			events = append(events, &core.EventSendPacket{
+			event = &core.EventSendPacket{
 				Sequence:         ev.Sequence,
 				SrcPort:          ev.SourcePort,
 				SrcChannel:       ev.SourceChannel,
 				TimeoutHeight:    clienttypes.Height(ev.TimeoutHeight),
 				TimeoutTimestamp: time.Unix(0, int64(ev.TimeoutTimestamp)),
 				Data:             ev.Data,
-			})
+			}
 		case abiRecvPacket.ID:
 			ev, err := c.ibcHandler.ParseRecvPacket(*log)
 			if err != nil {
 				return nil, fmt.Errorf("failed to parse RecvPacket event: logIndex=%d, log=%v", i, log)
 			}
-			events = append(events, &core.EventRecvPacket{
+			event = &core.EventRecvPacket{
 				Sequence:         ev.Packet.Sequence,
 				DstPort:          ev.Packet.DestinationPort,
 				DstChannel:       ev.Packet.DestinationChannel,
 				TimeoutHeight:    clienttypes.Height(ev.Packet.TimeoutHeight),
 				TimeoutTimestamp: time.Unix(0, int64(ev.Packet.TimeoutTimestamp)),
 				Data:             ev.Packet.Data,
-			})
+			}
 		case abiWriteAcknowledgement.ID:
 			ev, err := c.ibcHandler.ParseWriteAcknowledgement(*log)
 			if err != nil {
 				return nil, fmt.Errorf("failed to parse WriteAcknowledgement event: logIndex=%d, log=%v", i, log)
 			}
-			events = append(events, &core.EventWriteAcknowledgement{
+			event = &core.EventWriteAcknowledgement{
 				Sequence:        ev.Sequence,
 				DstPort:         ev.DestinationPortId,
 				DstChannel:      ev.DestinationChannel,
 				Acknowledgement: ev.Acknowledgement,
-			})
+			}
 		case abiAcknowledgePacket.ID:
 			ev, err := c.ibcHandler.ParseAcknowledgePacket(*log)
 			if err != nil {
 				return nil, fmt.Errorf("failed to parse AcknowledgePacket event: logIndex=%d, log=%v", i, log)
 			}
-			events = append(events, &core.EventAcknowledgePacket{
+			event = &core.EventAcknowledgePacket{
 				Sequence:         ev.Packet.Sequence,
 				SrcPort:          ev.Packet.SourcePort,
 				SrcChannel:       ev.Packet.SourceChannel,
 				TimeoutHeight:    clienttypes.Height(ev.Packet.TimeoutHeight),
 				TimeoutTimestamp: time.Unix(0, int64(ev.Packet.TimeoutTimestamp)),
-			})
+			}
+		default:
+			event = &core.EventUnknown{Value: log}
 		}
+		events = append(events, event)
 	}
 	return events, nil
 }
