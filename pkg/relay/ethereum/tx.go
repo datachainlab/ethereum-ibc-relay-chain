@@ -2,8 +2,9 @@ package ethereum
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"log"
+	"time"
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/gogoproto/proto"
@@ -20,6 +21,8 @@ import (
 
 // SendMsgs sends msgs to the chain
 func (c *Chain) SendMsgs(msgs []sdk.Msg) ([]core.MsgID, error) {
+	logger := c.GetChainLogger()
+	defer logger.TimeTrack(time.Now(), "SendMsgs")
 	var msgIDs []core.MsgID
 	for i, msg := range msgs {
 		var (
@@ -56,9 +59,11 @@ func (c *Chain) SendMsgs(msgs []sdk.Msg) ([]core.MsgID, error) {
 		// case *transfertypes.MsgTransfer:
 		// 	err = c.client.transfer(msg)
 		default:
+			logger.Error("failed to send msg", errors.New("illegal msg type"), "msg", msg)
 			panic("illegal msg type")
 		}
 		if err != nil {
+			logger.Error("failed to send msg", err, "msg", msg)
 			return nil, err
 		}
 		if receipt, revertReason, err := c.client.WaitForReceiptAndGet(ctx, tx.Hash(), c.config.EnableDebugTrace); err != nil {
@@ -68,7 +73,7 @@ func (c *Chain) SendMsgs(msgs []sdk.Msg) ([]core.MsgID, error) {
 		}
 		if c.msgEventListener != nil {
 			if err := c.msgEventListener.OnSentMsg([]sdk.Msg{msg}); err != nil {
-				log.Println("failed to OnSendMsg call", "msg", msg, "err", err)
+				logger.Error("failed to OnSendMsg call", err, "msg", msg)
 			}
 		}
 		msgIDs = append(msgIDs, &MsgID{txHash: tx.Hash()})
