@@ -7,6 +7,7 @@ import (
 	"math/big"
 	"time"
 
+	"github.com/avast/retry-go"
 	"github.com/cosmos/cosmos-sdk/codec"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	transfertypes "github.com/cosmos/ibc-go/v7/modules/apps/transfer/types"
@@ -41,7 +42,13 @@ var _ core.Chain = (*Chain)(nil)
 
 func NewChain(config ChainConfig) (*Chain, error) {
 	id := big.NewInt(config.EthChainId)
-	client, err := client.NewETHClient(config.RpcAddr)
+	client, err := client.NewETHClient(
+		config.RpcAddr,
+		client.WithRetryOption(
+			retry.Attempts(uint(config.MaxRetryForInclusion)),
+			retry.Delay(time.Duration(config.AverageBlockTimeMsec)*time.Millisecond),
+		),
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -101,6 +108,10 @@ func (c *Chain) Timestamp(height ibcexported.Height) (time.Time, error) {
 	} else {
 		return time.Unix(int64(header.Time), 0), nil
 	}
+}
+
+func (c *Chain) AverageBlockTime() time.Duration {
+	return time.Duration(c.config.AverageBlockTimeMsec) * time.Millisecond
 }
 
 // GetAddress returns the address of relayer

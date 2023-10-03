@@ -103,7 +103,7 @@ func (cl ETHClient) getProof(address common.Address, storageKeys [][]byte, block
 		hashes = append(hashes, h)
 	}
 	var msg json.RawMessage
-	if err := cl.rpcClient.Call(&msg, "eth_getProof", address, hashes, blockNumber); err != nil {
+	if err := cl.Raw().Call(&msg, "eth_getProof", address, hashes, blockNumber); err != nil {
 		return nil, err
 	}
 	return msg, nil
