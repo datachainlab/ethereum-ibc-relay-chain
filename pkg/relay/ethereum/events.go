@@ -54,7 +54,7 @@ func (chain *Chain) findSentPackets(ctx core.QueryContext, fromHeight uint64) (c
 		return nil, err
 	} else if !found {
 		err := fmt.Errorf("channel not found")
-		logger.Error("failed to get channel", err, "sourcePortID", chain.Path().PortID, "sourceChannel", chain.Path().ChannelID)
+		logger.Error("failed to get channel", err, "port_id", chain.Path().PortID, "channel_id", chain.Path().ChannelID)
 		return nil, err
 	} else {
 		dstPortID = channel.Counterparty.PortId

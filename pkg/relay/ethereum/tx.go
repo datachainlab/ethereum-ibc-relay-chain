@@ -67,6 +67,7 @@ func (c *Chain) SendMsgs(msgs []sdk.Msg) ([]core.MsgID, error) {
 			return nil, err
 		}
 		if receipt, revertReason, err := c.client.WaitForReceiptAndGet(ctx, tx.Hash(), c.config.EnableDebugTrace); err != nil {
+			logger.Error("failed to get receipt", err, "msg", msg)
 			return nil, err
 		} else if receipt.Status == gethtypes.ReceiptStatusFailed {
 			return nil, fmt.Errorf("tx execution failed: revertReason=%s, msgIndex=%d, msg=%v", revertReason, i, msg)
