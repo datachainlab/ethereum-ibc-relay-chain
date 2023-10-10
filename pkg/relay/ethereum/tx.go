@@ -70,8 +70,9 @@ func (c *Chain) SendMsgs(msgs []sdk.Msg) ([]core.MsgID, error) {
 			logger.Error("failed to get receipt", err, "msg", msg)
 			return nil, err
 		} else if receipt.Status == gethtypes.ReceiptStatusFailed {
-			logger.Error("tx execution failed", fmt.Errorf("revertReason=%s, msgIndex=%d", revertReason, i), "msg", msg)
-			return nil, fmt.Errorf("tx execution failed: revertReason=%s, msgIndex=%d, msg=%v", revertReason, i, msg)
+			err := fmt.Errorf("tx execution failed: revertReason=%s, msgIndex=%d, msg=%v", revertReason, i, msg)
+			logger.Error("tx execution failed", err, "msg", msg)
+			return nil, err
 		}
 		if c.msgEventListener != nil {
 			if err := c.msgEventListener.OnSentMsg([]sdk.Msg{msg}); err != nil {
