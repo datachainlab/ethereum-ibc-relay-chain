@@ -3,15 +3,17 @@ package ethereum
 import (
 	"fmt"
 	"math/big"
+	"time"
 
 	clienttypes "github.com/cosmos/ibc-go/v7/modules/core/02-client/types"
 	channeltypes "github.com/cosmos/ibc-go/v7/modules/core/04-channel/types"
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/hyperledger-labs/yui-relayer/core"
+	"github.com/hyperledger-labs/yui-relayer/log"
 
 	"github.com/datachainlab/ethereum-ibc-relay-chain/pkg/contract/ibchandler"
-	"github.com/hyperledger-labs/yui-relayer/core"
 )
 
 var (
@@ -40,15 +42,20 @@ func init() {
 }
 
 func (chain *Chain) findSentPackets(ctx core.QueryContext, fromHeight uint64) (core.PacketInfoList, error) {
+	logger := chain.GetChannelLogger()
+	defer logger.TimeTrack(time.Now(), "findSentPackets")
 	var dstPortID, dstChannelID string
 	if channel, found, err := chain.ibcHandler.GetChannel(
 		chain.callOptsFromQueryContext(ctx),
 		chain.Path().PortID,
 		chain.Path().ChannelID,
 	); err != nil {
+		logger.Error("failed to get channel", err)
 		return nil, err
 	} else if !found {
-		return nil, fmt.Errorf("channel not found: sourcePortID=%v sourceChannel=%v", chain.Path().PortID, chain.Path().ChannelID)
+		err := fmt.Errorf("channel not found")
+		logger.Error("failed to get channel", err, "port_id", chain.Path().PortID, "channel_id", chain.Path().ChannelID)
+		return nil, err
 	} else {
 		dstPortID = channel.Counterparty.PortId
 		dstChannelID = channel.Counterparty.ChannelId
@@ -67,6 +74,7 @@ func (chain *Chain) findSentPackets(ctx core.QueryContext, fromHeight uint64) (c
 
 	logs, err := chain.client.FilterLogs(ctx.Context(), query)
 	if err != nil {
+		logger.Error("failed to filter logs", err)
 		return nil, err
 	}
 
@@ -99,8 +107,11 @@ func (chain *Chain) findSentPackets(ctx core.QueryContext, fromHeight uint64) (c
 }
 
 func (chain *Chain) findReceivedPackets(ctx core.QueryContext, fromHeight uint64) (core.PacketInfoList, error) {
+	logger := chain.GetChannelLogger()
+	defer logger.TimeTrack(time.Now(), "findReceivedPackets")
 	recvPacketEvents, err := chain.findRecvPacketEvents(ctx, fromHeight)
 	if err != nil {
+		logger.Error("failed to find recv packet events", err)
 		return nil, err
 	} else if len(recvPacketEvents) == 0 {
 		return nil, nil
@@ -108,6 +119,7 @@ func (chain *Chain) findReceivedPackets(ctx core.QueryContext, fromHeight uint64
 
 	writeAckEvents, err := chain.findWriteAckEvents(ctx, recvPacketEvents[0].Raw.BlockNumber)
 	if err != nil {
+		logger.Error("failed to find write ack events", err)
 		return nil, err
 	} else if len(writeAckEvents) == 0 {
 		return nil, nil
@@ -195,4 +207,15 @@ func (chain *Chain) findWriteAckEvents(ctx core.QueryContext, fromHeight uint64)
 	}
 
 	return events, nil
+}
+
+func (chain *Chain) GetChannelLogger() *log.RelayLogger {
+	logger := GetModuleLogger()
+	if chain.Path() == nil {
+		return logger
+	}
+	chainID := chain.Path().ChainID
+	portID := chain.Path().PortID
+	channelID := chain.Path().ChannelID
+	return logger.WithChannel(chainID, portID, channelID)
 }

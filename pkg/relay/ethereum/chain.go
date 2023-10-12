@@ -3,6 +3,7 @@ package ethereum
 import (
 	"context"
 	"crypto/ecdsa"
+	"errors"
 	"fmt"
 	"math/big"
 	"time"
@@ -17,11 +18,12 @@ import (
 	committypes "github.com/cosmos/ibc-go/v7/modules/core/23-commitment/types"
 	ibcexported "github.com/cosmos/ibc-go/v7/modules/core/exported"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
+	"github.com/hyperledger-labs/yui-relayer/core"
+	"github.com/hyperledger-labs/yui-relayer/log"
 
 	"github.com/datachainlab/ethereum-ibc-relay-chain/pkg/client"
 	"github.com/datachainlab/ethereum-ibc-relay-chain/pkg/contract/ibchandler"
 	"github.com/datachainlab/ethereum-ibc-relay-chain/pkg/wallet"
-	"github.com/hyperledger-labs/yui-relayer/core"
 )
 
 type Chain struct {
@@ -94,8 +96,10 @@ func (c *Chain) ChainID() string {
 
 // GetLatestHeight gets the chain for the latest height and returns it
 func (c *Chain) LatestHeight() (ibcexported.Height, error) {
+	logger := c.GetChainLogger()
 	bn, err := c.client.BlockNumber(context.TODO())
 	if err != nil {
+		logger.Error("failed to get block number", err)
 		return nil, err
 	}
 	return clienttypes.NewHeight(0, bn), nil
@@ -132,7 +136,9 @@ func (c *Chain) Client() *client.ETHClient {
 
 // SetRelayInfo sets source's path and counterparty's info to the chain
 func (c *Chain) SetRelayInfo(p *core.PathEnd, _ *core.ProvableChain, _ *core.PathEnd) error {
+	logger := c.GetChainLogger()
 	if err := p.Validate(); err != nil {
+		logger.Error("invalid path", err)
 		return fmt.Errorf("path on chain %s failed to set: %w", c.ChainID(), err)
 	}
 	c.pathEnd = p
@@ -150,18 +156,24 @@ func (c *Chain) RegisterMsgEventListener(listener core.MsgEventListener) {
 
 // QueryClientConsensusState retrevies the latest consensus state for a client in state at a given height
 func (c *Chain) QueryClientConsensusState(ctx core.QueryContext, dstClientConsHeight ibcexported.Height) (*clienttypes.QueryConsensusStateResponse, error) {
+	logger := c.GetChainLogger()
+	defer logger.TimeTrack(time.Now(), "QueryClientConsensusState")
 	s, found, err := c.ibcHandler.GetConsensusState(c.callOptsFromQueryContext(ctx), c.pathEnd.ClientID, pbToHostHeight(dstClientConsHeight))
 	if err != nil {
+		logger.Error("failed to get consensus state", err)
 		return nil, err
 	} else if !found {
+		logger.Error("client consensus not found", errors.New("client consensus not found"))
 		return nil, fmt.Errorf("client consensus not found: %v", c.pathEnd.ClientID)
 	}
 	var consensusState ibcexported.ConsensusState
 	if err := c.Codec().UnmarshalInterface(s, &consensusState); err != nil {
+		logger.Error("failed to unmarshal consensus state", err)
 		return nil, err
 	}
 	any, err := clienttypes.PackConsensusState(consensusState)
 	if err != nil {
+		logger.Error("failed to pack consensus state", err)
 		return nil, err
 	}
 	return clienttypes.NewQueryConsensusStateResponse(any, nil, ctx.Height().(clienttypes.Height)), nil
@@ -170,18 +182,24 @@ func (c *Chain) QueryClientConsensusState(ctx core.QueryContext, dstClientConsHe
 // QueryClientState returns the client state of dst chain
 // height represents the height of dst chain
 func (c *Chain) QueryClientState(ctx core.QueryContext) (*clienttypes.QueryClientStateResponse, error) {
+	logger := c.GetChainLogger()
+	defer logger.TimeTrack(time.Now(), "QueryClientState")
 	s, found, err := c.ibcHandler.GetClientState(c.callOptsFromQueryContext(ctx), c.pathEnd.ClientID)
 	if err != nil {
+		logger.Error("failed to get client state", err)
 		return nil, err
 	} else if !found {
+		logger.Error("client not found", errors.New("client not found"))
 		return nil, fmt.Errorf("client not found: %v", c.pathEnd.ClientID)
 	}
 	var clientState ibcexported.ClientState
 	if err := c.Codec().UnmarshalInterface(s, &clientState); err != nil {
+		logger.Error("failed to unmarshal client state", err)
 		return nil, err
 	}
 	any, err := clienttypes.PackClientState(clientState)
 	if err != nil {
+		logger.Error("failed to pack client state", err)
 		return nil, err
 	}
 	return clienttypes.NewQueryClientStateResponse(any, nil, ctx.Height().(clienttypes.Height)), nil
@@ -205,8 +223,11 @@ var emptyConnRes = conntypes.NewQueryConnectionResponse(
 
 // QueryConnection returns the remote end of a given connection
 func (c *Chain) QueryConnection(ctx core.QueryContext) (*conntypes.QueryConnectionResponse, error) {
+	logger := c.GetChainLogger()
+	defer logger.TimeTrack(time.Now(), "QueryConnection")
 	conn, found, err := c.ibcHandler.GetConnection(c.callOptsFromQueryContext(ctx), c.pathEnd.ConnectionID)
 	if err != nil {
+		logger.Error("failed to get connection", err)
 		return nil, err
 	} else if !found {
 		return emptyConnRes, nil
@@ -231,8 +252,11 @@ var emptyChannelRes = chantypes.NewQueryChannelResponse(
 
 // QueryChannel returns the channel associated with a channelID
 func (c *Chain) QueryChannel(ctx core.QueryContext) (chanRes *chantypes.QueryChannelResponse, err error) {
+	logger := c.GetChainLogger()
+	defer logger.TimeTrack(time.Now(), "QueryChannel")
 	chann, found, err := c.ibcHandler.GetChannel(c.callOptsFromQueryContext(ctx), c.pathEnd.PortID, c.pathEnd.ChannelID)
 	if err != nil {
+		logger.Error("failed to get channel", err)
 		return nil, err
 	} else if !found {
 		return emptyChannelRes, nil
@@ -242,10 +266,13 @@ func (c *Chain) QueryChannel(ctx core.QueryContext) (chanRes *chantypes.QueryCha
 
 // QueryUnreceivedPackets returns a list of unrelayed packet commitments
 func (c *Chain) QueryUnreceivedPackets(ctx core.QueryContext, seqs []uint64) ([]uint64, error) {
+	logger := c.GetChannelLogger()
+	defer logger.TimeTrack(time.Now(), "QueryUnreceivedPackets")
 	var ret []uint64
 	for _, seq := range seqs {
 		found, err := c.ibcHandler.HasPacketReceipt(c.callOptsFromQueryContext(ctx), c.pathEnd.PortID, c.pathEnd.ChannelID, seq)
 		if err != nil {
+			logger.Error("failed to get packet receipt", err)
 			return nil, err
 		} else if !found {
 			ret = append(ret, seq)
@@ -256,24 +283,30 @@ func (c *Chain) QueryUnreceivedPackets(ctx core.QueryContext, seqs []uint64) ([]
 
 // QueryUnfinalizedRelayedPackets returns packets and heights that are sent but not received at the latest finalized block on the counterparty chain
 func (c *Chain) QueryUnfinalizedRelayPackets(ctx core.QueryContext, counterparty core.LightClientICS04Querier) (core.PacketInfoList, error) {
+	logger := c.GetChannelLogger()
+	defer logger.TimeTrack(time.Now(), "QueryUnfinalizedRelayPackets")
 	checkpoint, err := c.loadCheckpoint(sendCheckpoint)
 	if err != nil {
+		logger.Error("failed to load checkpoint", err)
 		return nil, err
 	}
 
 	packets, err := c.findSentPackets(ctx, checkpoint)
 	if err != nil {
+		logger.Error("failed to find sent packets", err)
 		return nil, err
 	}
 
 	counterpartyHeader, err := counterparty.GetLatestFinalizedHeader()
 	if err != nil {
+		logger.Error("failed to get latest finalized header", err)
 		return nil, err
 	}
 
 	counterpartyCtx := core.NewQueryContext(context.TODO(), counterpartyHeader.GetHeight())
 	seqs, err := counterparty.QueryUnreceivedPackets(counterpartyCtx, packets.ExtractSequenceList())
 	if err != nil {
+		logger.Error("failed to query unreceived packets", err)
 		return nil, err
 	}
 
@@ -284,6 +317,7 @@ func (c *Chain) QueryUnfinalizedRelayPackets(ctx core.QueryContext, counterparty
 		checkpoint = packets[0].EventHeight.GetRevisionHeight()
 	}
 	if err := c.saveCheckpoint(checkpoint, sendCheckpoint); err != nil {
+		logger.Error("failed to save checkpoint", err)
 		return nil, err
 	}
 
@@ -292,10 +326,13 @@ func (c *Chain) QueryUnfinalizedRelayPackets(ctx core.QueryContext, counterparty
 
 // QueryUnreceivedAcknowledgements returns a list of unrelayed packet acks
 func (c *Chain) QueryUnreceivedAcknowledgements(ctx core.QueryContext, seqs []uint64) ([]uint64, error) {
+	logger := c.GetChannelLogger()
+	defer logger.TimeTrack(time.Now(), "QueryUnreceivedAcknowledgements")
 	var ret []uint64
 	for _, seq := range seqs {
 		_, found, err := c.ibcHandler.GetHashedPacketCommitment(c.callOptsFromQueryContext(ctx), c.pathEnd.PortID, c.pathEnd.ChannelID, seq)
 		if err != nil {
+			logger.Error("failed to get hashed packet commitment", err)
 			return nil, err
 		} else if found {
 			ret = append(ret, seq)
@@ -306,24 +343,30 @@ func (c *Chain) QueryUnreceivedAcknowledgements(ctx core.QueryContext, seqs []ui
 
 // QueryUnfinalizedRelayedAcknowledgements returns acks and heights that are sent but not received at the latest finalized block on the counterpartychain
 func (c *Chain) QueryUnfinalizedRelayAcknowledgements(ctx core.QueryContext, counterparty core.LightClientICS04Querier) (core.PacketInfoList, error) {
+	logger := c.GetChannelLogger()
+	defer logger.TimeTrack(time.Now(), "QueryUnfinalizedRelayAcknowledgements")
 	checkpoint, err := c.loadCheckpoint(recvCheckpoint)
 	if err != nil {
+		logger.Error("failed to load checkpoint", err)
 		return nil, err
 	}
 
 	packets, err := c.findReceivedPackets(ctx, checkpoint)
 	if err != nil {
+		logger.Error("failed to find received packets", err)
 		return nil, err
 	}
 
 	counterpartyHeader, err := counterparty.GetLatestFinalizedHeader()
 	if err != nil {
+		logger.Error("failed to get latest finalized header", err)
 		return nil, err
 	}
 
 	counterpartyCtx := core.NewQueryContext(context.TODO(), counterpartyHeader.GetHeight())
 	seqs, err := counterparty.QueryUnreceivedAcknowledgements(counterpartyCtx, packets.ExtractSequenceList())
 	if err != nil {
+		logger.Error("failed to query unreceived acknowledgements", err)
 		return nil, err
 	}
 
@@ -334,6 +377,7 @@ func (c *Chain) QueryUnfinalizedRelayAcknowledgements(ctx core.QueryContext, cou
 		checkpoint = packets[0].EventHeight.GetRevisionHeight()
 	}
 	if err := c.saveCheckpoint(checkpoint, recvCheckpoint); err != nil {
+		logger.Error("failed to save checkpoint", err)
 		return nil, err
 	}
 
@@ -352,4 +396,13 @@ func (c *Chain) QueryDenomTraces(ctx core.QueryContext, offset uint64, limit uin
 
 func (c *Chain) callOptsFromQueryContext(ctx core.QueryContext) *bind.CallOpts {
 	return c.CallOpts(ctx.Context(), int64(ctx.Height().GetRevisionHeight()))
+}
+
+func (c *Chain) GetChainLogger() *log.RelayLogger {
+	logger := GetModuleLogger()
+	if c.Path() == nil {
+		return logger
+	}
+	chainID := c.Path().ChainID
+	return logger.WithChain(chainID)
 }
