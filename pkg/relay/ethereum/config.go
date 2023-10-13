@@ -24,9 +24,6 @@ func (c ChainConfig) Validate() error {
 	if isEmpty(c.ChainId) {
 		errs = append(errs, fmt.Errorf("config attribute \"chain_id\" is empty"))
 	}
-	if c.EthChainId <= 0 {
-		errs = append(errs, fmt.Errorf("config attribute \"eth_chain_id\" must be greater than zero: %v", c.EthChainId))
-	}
 	if isEmpty(c.RpcAddr) {
 		errs = append(errs, fmt.Errorf("config attribute \"rpc_addr\" is empty"))
 	}

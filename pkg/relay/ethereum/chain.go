@@ -43,7 +43,7 @@ type Chain struct {
 var _ core.Chain = (*Chain)(nil)
 
 func NewChain(config ChainConfig) (*Chain, error) {
-	id := big.NewInt(config.EthChainId)
+	id := big.NewInt(int64(config.EthChainId))
 	client, err := client.NewETHClient(
 		config.RpcAddr,
 		client.WithRetryOption(
