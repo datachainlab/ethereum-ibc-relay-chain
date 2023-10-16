@@ -79,7 +79,7 @@ func (c *Chain) SendMsgs(msgs []sdk.Msg) ([]core.MsgID, error) {
 				logger.Error("failed to OnSendMsg call", err, "msg", msg)
 			}
 		}
-		msgIDs = append(msgIDs, &MsgID{txHash: tx.Hash()})
+		msgIDs = append(msgIDs, NewMsgID(tx.Hash()))
 	}
 	return msgIDs, nil
 }
@@ -90,7 +90,7 @@ func (c *Chain) GetMsgResult(id core.MsgID) (core.MsgResult, error) {
 		return nil, fmt.Errorf("unexpected message id type: %T", id)
 	}
 
-	receipt, revertReason, err := c.client.WaitForReceiptAndGet(context.TODO(), msgID.txHash, c.config.EnableDebugTrace)
+	receipt, revertReason, err := c.client.WaitForReceiptAndGet(context.TODO(), msgID.TxHash(), c.config.EnableDebugTrace)
 	if err != nil {
 		return nil, err
 	}

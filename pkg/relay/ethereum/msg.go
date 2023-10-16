@@ -15,14 +15,15 @@ var (
 	_ core.MsgResult = (*MsgResult)(nil)
 )
 
-type MsgID struct {
-	core.IsMsgID
-
-	txHash common.Hash
+func NewMsgID(txHash common.Hash) *MsgID {
+	return &MsgID{
+		TxHashHex: txHash.Hex(),
+	}
 }
 
-func (i *MsgID) String() string {
-	return i.txHash.Hex()
+func (*MsgID) Is_MsgID() {}
+func (id *MsgID) TxHash() common.Hash {
+	return common.HexToHash(id.TxHashHex)
 }
 
 type MsgResult struct {

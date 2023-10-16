@@ -11,4 +11,8 @@ func RegisterInterfaces(registry codectypes.InterfaceRegistry) {
 		(*core.ChainConfig)(nil),
 		&ChainConfig{},
 	)
+	registry.RegisterImplementations(
+		(*core.MsgID)(nil),
+		&MsgID{},
+	)
 }
