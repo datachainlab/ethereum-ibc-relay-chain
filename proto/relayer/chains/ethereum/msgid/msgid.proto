@@ -1,0 +1,11 @@
+syntax = "proto3";
+package relayer.chains.ethereum.msgid;
+
+import "gogoproto/gogo.proto";
+
+option go_package = "github.com/datachainlab/ethereum-ibc-relay-chain/pkg/relay/ethereum";
+option (gogoproto.goproto_getters_all) = false;
+
+message MsgID {
+  string tx_hash_hex = 1;
+}
