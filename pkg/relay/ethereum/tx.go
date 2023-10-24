@@ -22,7 +22,7 @@ import (
 // SendMsgs sends msgs to the chain
 func (c *Chain) SendMsgs(msgs []sdk.Msg) ([]core.MsgID, error) {
 	logger := c.GetChainLogger()
-	defer logger.TimeTrack(time.Now(), "SendMsgs")
+	defer logger.TimeTrack(time.Now(), "SendMsgs", "num_msgs", len(msgs))
 	var msgIDs []core.MsgID
 	for i, msg := range msgs {
 		var (
