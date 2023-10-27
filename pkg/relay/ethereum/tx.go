@@ -180,7 +180,7 @@ func (c *Chain) TxConnectionOpenAck(opts *bind.TransactOpts, msg *conntypes.MsgC
 			Identifier: msg.Version.Identifier,
 			Features:   msg.Version.Features,
 		},
-		CounterpartyConnectionID: msg.CounterpartyConnectionId,
+		CounterpartyConnectionId: msg.CounterpartyConnectionId,
 		ProofTry:                 msg.ProofTry,
 		ProofClient:              msg.ProofClient,
 		ProofConsensus:           msg.ProofConsensus,
