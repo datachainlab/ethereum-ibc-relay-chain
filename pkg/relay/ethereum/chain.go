@@ -267,7 +267,6 @@ func (c *Chain) QueryChannel(ctx core.QueryContext) (chanRes *chantypes.QueryCha
 // QueryUnreceivedPackets returns a list of unrelayed packet commitments
 func (c *Chain) QueryUnreceivedPackets(ctx core.QueryContext, seqs []uint64) ([]uint64, error) {
 	logger := c.GetChannelLogger()
-	defer logger.TimeTrack(time.Now(), "QueryUnreceivedPackets", "num_seqs", len(seqs))
 	var ret []uint64
 	for _, seq := range seqs {
 		found, err := c.ibcHandler.HasPacketReceipt(c.callOptsFromQueryContext(ctx), c.pathEnd.PortID, c.pathEnd.ChannelID, seq)
@@ -284,7 +283,6 @@ func (c *Chain) QueryUnreceivedPackets(ctx core.QueryContext, seqs []uint64) ([]
 // QueryUnfinalizedRelayedPackets returns packets and heights that are sent but not received at the latest finalized block on the counterparty chain
 func (c *Chain) QueryUnfinalizedRelayPackets(ctx core.QueryContext, counterparty core.LightClientICS04Querier) (core.PacketInfoList, error) {
 	logger := c.GetChannelLogger()
-	now := time.Now()
 	checkpoint, err := c.loadCheckpoint(sendCheckpoint)
 	if err != nil {
 		logger.Error("failed to load checkpoint", err)
@@ -321,15 +319,12 @@ func (c *Chain) QueryUnfinalizedRelayPackets(ctx core.QueryContext, counterparty
 		return nil, err
 	}
 
-	defer logger.TimeTrack(now, "QueryUnfinalizedRelayPackets", "num_packets", len(packets))
-
 	return packets, nil
 }
 
 // QueryUnreceivedAcknowledgements returns a list of unrelayed packet acks
 func (c *Chain) QueryUnreceivedAcknowledgements(ctx core.QueryContext, seqs []uint64) ([]uint64, error) {
 	logger := c.GetChannelLogger()
-	defer logger.TimeTrack(time.Now(), "QueryUnreceivedAcknowledgements", "num_seqs", len(seqs))
 	var ret []uint64
 	for _, seq := range seqs {
 		_, found, err := c.ibcHandler.GetHashedPacketCommitment(c.callOptsFromQueryContext(ctx), c.pathEnd.PortID, c.pathEnd.ChannelID, seq)
@@ -346,7 +341,6 @@ func (c *Chain) QueryUnreceivedAcknowledgements(ctx core.QueryContext, seqs []ui
 // QueryUnfinalizedRelayedAcknowledgements returns acks and heights that are sent but not received at the latest finalized block on the counterpartychain
 func (c *Chain) QueryUnfinalizedRelayAcknowledgements(ctx core.QueryContext, counterparty core.LightClientICS04Querier) (core.PacketInfoList, error) {
 	logger := c.GetChannelLogger()
-	now := time.Now()
 	checkpoint, err := c.loadCheckpoint(recvCheckpoint)
 	if err != nil {
 		logger.Error("failed to load checkpoint", err)
@@ -382,8 +376,6 @@ func (c *Chain) QueryUnfinalizedRelayAcknowledgements(ctx core.QueryContext, cou
 		logger.Error("failed to save checkpoint", err)
 		return nil, err
 	}
-
-	defer logger.TimeTrack(now, "QueryUnfinalizedRelayAcknowledgements", "num_packets", len(packets))
 
 	return packets, nil
 }
