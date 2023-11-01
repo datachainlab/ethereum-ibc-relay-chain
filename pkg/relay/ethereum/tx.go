@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/gogoproto/proto"
@@ -22,7 +21,6 @@ import (
 // SendMsgs sends msgs to the chain
 func (c *Chain) SendMsgs(msgs []sdk.Msg) ([]core.MsgID, error) {
 	logger := c.GetChainLogger()
-	defer logger.TimeTrack(time.Now(), "SendMsgs")
 	var msgIDs []core.MsgID
 	for i, msg := range msgs {
 		var (
