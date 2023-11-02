@@ -117,7 +117,7 @@ func (cl *ETHClient) WaitForReceiptAndGet(ctx context.Context, txHash common.Has
 }
 
 func (cl *ETHClient) DebugTraceTransaction(ctx context.Context, txHash common.Hash) (string, error) {
-	var result *CallFrame
+	var result *callFrame
 	if err := cl.Raw().CallContext(ctx, &result, "debug_traceTransaction", txHash, map[string]string{"tracer": "callTracer"}); err != nil {
 		return "", err
 	}
@@ -165,7 +165,7 @@ type callLog struct {
 }
 
 // see: https://github.com/ethereum/go-ethereum/blob/v1.12.0/eth/tracers/native/call.go#L44-L59
-type CallFrame struct {
+type callFrame struct {
 	Type         vm.OpCode       `json:"-"`
 	From         common.Address  `json:"from"`
 	Gas          uint64          `json:"gas"`
@@ -175,14 +175,14 @@ type CallFrame struct {
 	Output       []byte          `json:"output,omitempty" rlp:"optional"`
 	Error        string          `json:"error,omitempty" rlp:"optional"`
 	RevertReason string          `json:"revertReason,omitempty"`
-	Calls        []CallFrame     `json:"calls,omitempty" rlp:"optional"`
+	Calls        []callFrame     `json:"calls,omitempty" rlp:"optional"`
 	Logs         []callLog       `json:"logs,omitempty" rlp:"optional"`
 	// Placed at end on purpose. The RLP will be decoded to 0 instead of
 	// nil if there are non-empty elements after in the struct.
 	Value *big.Int `json:"value,omitempty" rlp:"optional"`
 }
 
-func searchRevertReason(result *CallFrame) (string, error) {
+func searchRevertReason(result *callFrame) (string, error) {
 	if result.RevertReason != "" {
 		return result.RevertReason, nil
 	}
