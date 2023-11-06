@@ -268,12 +268,34 @@ func (c *Chain) QueryChannel(ctx core.QueryContext) (chanRes *chantypes.QueryCha
 func (c *Chain) QueryUnreceivedPackets(ctx core.QueryContext, seqs []uint64) ([]uint64, error) {
 	logger := c.GetChannelLogger()
 	var ret []uint64
+	var nextSequenceRecv uint64
 	for _, seq := range seqs {
-		found, err := c.ibcHandler.HasPacketReceipt(c.callOptsFromQueryContext(ctx), c.pathEnd.PortID, c.pathEnd.ChannelID, seq)
-		if err != nil {
-			logger.Error("failed to get packet receipt", err)
-			return nil, err
-		} else if !found {
+		var received bool
+		var err error
+
+		// With UNORDERED channel, we can use receipts to check if packets are already received.
+		// With ORDERED channel, since IBC impls don't record receipts, we need to check nextSequenceRecv.
+		switch c.Path().GetOrder() {
+		case chantypes.UNORDERED:
+			if received, err = c.ibcHandler.HasPacketReceipt(c.callOptsFromQueryContext(ctx), c.pathEnd.PortID, c.pathEnd.ChannelID, seq); err != nil {
+				logger.Error("failed to get packet receipt", err)
+				return nil, err
+			}
+		case chantypes.ORDERED:
+			if nextSequenceRecv == 0 {
+				// queried only once
+				nextSequenceRecv, err = c.ibcHandler.GetNextSequenceRecv(c.callOptsFromQueryContext(ctx), c.pathEnd.PortID, c.pathEnd.ChannelID)
+				if err != nil {
+					logger.Error("failed to get nextSequenceRecv", err)
+					return nil, err
+				}
+			}
+			received = seq < nextSequenceRecv
+		default:
+			panic(fmt.Sprintf("unexpected order type: %d", c.Path().GetOrder()))
+		}
+
+		if !received {
 			ret = append(ret, seq)
 		}
 	}
