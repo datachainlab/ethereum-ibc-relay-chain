@@ -9,7 +9,9 @@ import (
 	"github.com/avast/retry-go"
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	gethtypes "github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/hyperledger-labs/yui-relayer/log"
@@ -115,7 +117,7 @@ func (cl *ETHClient) WaitForReceiptAndGet(ctx context.Context, txHash common.Has
 }
 
 func (cl *ETHClient) DebugTraceTransaction(ctx context.Context, txHash common.Hash) (string, error) {
-	var result *CallFrame
+	var result *callFrame
 	if err := cl.Raw().CallContext(ctx, &result, "debug_traceTransaction", txHash, map[string]string{"tracer": "callTracer"}); err != nil {
 		return "", err
 	}
@@ -156,23 +158,33 @@ func parseRevertReason(bz []byte) (string, error) {
 	return string(bz[68 : 68+size.Int64()]), nil
 }
 
-type CallFrame struct {
-	Type         *string     `json:"type"`
-	From         *string     `json:"from"`
-	To           *string     `json:"to"`
-	Value        *string     `json:"value"`
-	Gas          *string     `json:"gas"`
-	GasUsed      *string     `json:"gasUsed"`
-	Input        *string     `json:"input"`
-	Output       *string     `json:"output"`
-	Error        *string     `json:"error"`
-	RevertReason *string     `json:"revertReason"`
-	Calls        []CallFrame `json:"calls"`
+type callLog struct {
+	Address common.Address `json:"address"`
+	Topics  []common.Hash  `json:"topics"`
+	Data    hexutil.Bytes  `json:"data"`
 }
 
-func searchRevertReason(result *CallFrame) (string, error) {
-	if result.RevertReason != nil {
-		return *result.RevertReason, nil
+// see: https://github.com/ethereum/go-ethereum/blob/v1.12.0/eth/tracers/native/call.go#L44-L59
+type callFrame struct {
+	Type         vm.OpCode       `json:"-"`
+	From         common.Address  `json:"from"`
+	Gas          uint64          `json:"gas"`
+	GasUsed      uint64          `json:"gasUsed"`
+	To           *common.Address `json:"to,omitempty" rlp:"optional"`
+	Input        []byte          `json:"input" rlp:"optional"`
+	Output       []byte          `json:"output,omitempty" rlp:"optional"`
+	Error        string          `json:"error,omitempty" rlp:"optional"`
+	RevertReason string          `json:"revertReason,omitempty"`
+	Calls        []callFrame     `json:"calls,omitempty" rlp:"optional"`
+	Logs         []callLog       `json:"logs,omitempty" rlp:"optional"`
+	// Placed at end on purpose. The RLP will be decoded to 0 instead of
+	// nil if there are non-empty elements after in the struct.
+	Value *big.Int `json:"value,omitempty" rlp:"optional"`
+}
+
+func searchRevertReason(result *callFrame) (string, error) {
+	if result.RevertReason != "" {
+		return result.RevertReason, nil
 	}
 	for _, call := range result.Calls {
 		reason, err := searchRevertReason(&call)
