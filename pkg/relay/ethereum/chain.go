@@ -38,6 +38,8 @@ type Chain struct {
 	relayerPrvKey *ecdsa.PrivateKey
 	client        *client.ETHClient
 	ibcHandler    *ibchandler.Ibchandler
+
+	signer Signer
 }
 
 var _ core.Chain = (*Chain)(nil)
@@ -62,6 +64,10 @@ func NewChain(config ChainConfig) (*Chain, error) {
 	if err != nil {
 		return nil, err
 	}
+	signer, err := config.Signer.GetCachedValue().(SignerConfig).Build(big.NewInt(int64(config.EthChainId)))
+	if err != nil {
+		return nil, fmt.Errorf("failed to build signer: %v", err)
+	}
 	return &Chain{
 		config:        config,
 		client:        client,
@@ -69,6 +75,8 @@ func NewChain(config ChainConfig) (*Chain, error) {
 		chainID:       id,
 
 		ibcHandler: ibcHandler,
+
+		signer: signer,
 	}, nil
 }
 

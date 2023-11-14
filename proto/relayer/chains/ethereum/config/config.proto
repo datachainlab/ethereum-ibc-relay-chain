@@ -2,6 +2,7 @@ syntax = "proto3";
 package relayer.chains.ethereum.config;
 
 import "gogoproto/gogo.proto";
+import "google/protobuf/any.proto";
 
 option go_package = "github.com/datachainlab/ethereum-ibc-relay-chain/pkg/relay/ethereum";
 option (gogoproto.goproto_getters_all) = false;
@@ -24,4 +25,6 @@ message ChainConfig {
 
   uint64 average_block_time_msec = 10;
   uint64 max_retry_for_inclusion = 11;
+
+  google.protobuf.Any signer = 12;
 }

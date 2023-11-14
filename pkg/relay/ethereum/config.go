@@ -5,11 +5,15 @@ import (
 	"fmt"
 	"strings"
 
+	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/hyperledger-labs/yui-relayer/core"
 )
 
-var _ core.ChainConfig = (*ChainConfig)(nil)
+var (
+	_ core.ChainConfig                   = (*ChainConfig)(nil)
+	_ codectypes.UnpackInterfacesMessage = (*ChainConfig)(nil)
+)
 
 func (c ChainConfig) Build() (core.Chain, error) {
 	return NewChain(c)
@@ -42,8 +46,18 @@ func (c ChainConfig) Validate() error {
 	if c.MaxRetryForInclusion == 0 {
 		errs = append(errs, fmt.Errorf("config attribute \"max_retry_for_inclusion\" is zero"))
 	}
+	if err := c.Signer.GetCachedValue().(SignerConfig).Validate(); err != nil {
+		errs = append(errs, fmt.Errorf("signer config validation failed: %v", err))
+	}
 
 	return errors.Join(errs...)
+}
+
+func (c ChainConfig) UnpackInterfaces(unpacker codectypes.AnyUnpacker) error {
+	if err := unpacker.UnpackAny(c.Signer, new(SignerConfig)); err != nil {
+		return fmt.Errorf("failed to unpack ChainConfig attribute \"signer\": %v", err)
+	}
+	return nil
 }
 
 func (c ChainConfig) IBCAddress() common.Address {
