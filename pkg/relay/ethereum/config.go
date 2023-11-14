@@ -31,12 +31,6 @@ func (c ChainConfig) Validate() error {
 	if isEmpty(c.RpcAddr) {
 		errs = append(errs, fmt.Errorf("config attribute \"rpc_addr\" is empty"))
 	}
-	if isEmpty(c.HdwMnemonic) {
-		errs = append(errs, fmt.Errorf("config attribute \"hdw_mnemonic\" is empty"))
-	}
-	if isEmpty(c.HdwPath) {
-		errs = append(errs, fmt.Errorf("config attribute \"hdw_path\" is empty"))
-	}
 	if isEmpty(c.IbcAddress) {
 		errs = append(errs, fmt.Errorf("config attribute \"ibc_address\" is empty"))
 	}

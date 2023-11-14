@@ -2,7 +2,6 @@ package ethereum
 
 import (
 	"context"
-	"crypto/ecdsa"
 	"errors"
 	"fmt"
 	"math/big"
@@ -23,7 +22,6 @@ import (
 
 	"github.com/datachainlab/ethereum-ibc-relay-chain/pkg/client"
 	"github.com/datachainlab/ethereum-ibc-relay-chain/pkg/contract/ibchandler"
-	"github.com/datachainlab/ethereum-ibc-relay-chain/pkg/wallet"
 )
 
 type Chain struct {
@@ -35,9 +33,8 @@ type Chain struct {
 	codec            codec.ProtoCodecMarshaler
 	msgEventListener core.MsgEventListener
 
-	relayerPrvKey *ecdsa.PrivateKey
-	client        *client.ETHClient
-	ibcHandler    *ibchandler.Ibchandler
+	client     *client.ETHClient
+	ibcHandler *ibchandler.Ibchandler
 
 	signer Signer
 }
@@ -56,10 +53,6 @@ func NewChain(config ChainConfig) (*Chain, error) {
 	if err != nil {
 		return nil, err
 	}
-	key, err := wallet.GetPrvKeyFromMnemonicAndHDWPath(config.HdwMnemonic, config.HdwPath)
-	if err != nil {
-		return nil, err
-	}
 	ibcHandler, err := ibchandler.NewIbchandler(config.IBCAddress(), client)
 	if err != nil {
 		return nil, err
@@ -69,10 +62,9 @@ func NewChain(config ChainConfig) (*Chain, error) {
 		return nil, fmt.Errorf("failed to build signer: %v", err)
 	}
 	return &Chain{
-		config:        config,
-		client:        client,
-		relayerPrvKey: key,
-		chainID:       id,
+		config:  config,
+		client:  client,
+		chainID: id,
 
 		ibcHandler: ibcHandler,
 

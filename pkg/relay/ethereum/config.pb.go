@@ -25,19 +25,16 @@ var _ = math.Inf
 const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 
 type ChainConfig struct {
-	ChainId    string `protobuf:"bytes,1,opt,name=chain_id,json=chainId,proto3" json:"chain_id,omitempty"`
-	EthChainId uint64 `protobuf:"varint,2,opt,name=eth_chain_id,json=ethChainId,proto3" json:"eth_chain_id,omitempty"`
-	RpcAddr    string `protobuf:"bytes,3,opt,name=rpc_addr,json=rpcAddr,proto3" json:"rpc_addr,omitempty"`
-	// use for relayer
-	HdwMnemonic           string     `protobuf:"bytes,4,opt,name=hdw_mnemonic,json=hdwMnemonic,proto3" json:"hdw_mnemonic,omitempty"`
-	HdwPath               string     `protobuf:"bytes,5,opt,name=hdw_path,json=hdwPath,proto3" json:"hdw_path,omitempty"`
-	IbcAddress            string     `protobuf:"bytes,6,opt,name=ibc_address,json=ibcAddress,proto3" json:"ibc_address,omitempty"`
-	InitialSendCheckpoint uint64     `protobuf:"varint,7,opt,name=initial_send_checkpoint,json=initialSendCheckpoint,proto3" json:"initial_send_checkpoint,omitempty"`
-	InitialRecvCheckpoint uint64     `protobuf:"varint,8,opt,name=initial_recv_checkpoint,json=initialRecvCheckpoint,proto3" json:"initial_recv_checkpoint,omitempty"`
-	EnableDebugTrace      bool       `protobuf:"varint,9,opt,name=enable_debug_trace,json=enableDebugTrace,proto3" json:"enable_debug_trace,omitempty"`
-	AverageBlockTimeMsec  uint64     `protobuf:"varint,10,opt,name=average_block_time_msec,json=averageBlockTimeMsec,proto3" json:"average_block_time_msec,omitempty"`
-	MaxRetryForInclusion  uint64     `protobuf:"varint,11,opt,name=max_retry_for_inclusion,json=maxRetryForInclusion,proto3" json:"max_retry_for_inclusion,omitempty"`
-	Signer                *types.Any `protobuf:"bytes,12,opt,name=signer,proto3" json:"signer,omitempty"`
+	ChainId               string     `protobuf:"bytes,1,opt,name=chain_id,json=chainId,proto3" json:"chain_id,omitempty"`
+	EthChainId            uint64     `protobuf:"varint,2,opt,name=eth_chain_id,json=ethChainId,proto3" json:"eth_chain_id,omitempty"`
+	RpcAddr               string     `protobuf:"bytes,3,opt,name=rpc_addr,json=rpcAddr,proto3" json:"rpc_addr,omitempty"`
+	Signer                *types.Any `protobuf:"bytes,4,opt,name=signer,proto3" json:"signer,omitempty"`
+	IbcAddress            string     `protobuf:"bytes,5,opt,name=ibc_address,json=ibcAddress,proto3" json:"ibc_address,omitempty"`
+	InitialSendCheckpoint uint64     `protobuf:"varint,6,opt,name=initial_send_checkpoint,json=initialSendCheckpoint,proto3" json:"initial_send_checkpoint,omitempty"`
+	InitialRecvCheckpoint uint64     `protobuf:"varint,7,opt,name=initial_recv_checkpoint,json=initialRecvCheckpoint,proto3" json:"initial_recv_checkpoint,omitempty"`
+	EnableDebugTrace      bool       `protobuf:"varint,8,opt,name=enable_debug_trace,json=enableDebugTrace,proto3" json:"enable_debug_trace,omitempty"`
+	AverageBlockTimeMsec  uint64     `protobuf:"varint,9,opt,name=average_block_time_msec,json=averageBlockTimeMsec,proto3" json:"average_block_time_msec,omitempty"`
+	MaxRetryForInclusion  uint64     `protobuf:"varint,10,opt,name=max_retry_for_inclusion,json=maxRetryForInclusion,proto3" json:"max_retry_for_inclusion,omitempty"`
 }
 
 func (m *ChainConfig) Reset()         { *m = ChainConfig{} }
@@ -82,38 +79,36 @@ func init() {
 }
 
 var fileDescriptor_a8a57ab2f9f14837 = []byte{
-	// 486 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x54, 0x92, 0x41, 0x6f, 0xd3, 0x30,
-	0x18, 0x86, 0x1b, 0x36, 0xb6, 0xce, 0xed, 0x01, 0x45, 0x45, 0x4b, 0x77, 0x08, 0x85, 0x53, 0x25,
-	0xd6, 0x44, 0x02, 0xc1, 0x7d, 0x2b, 0x42, 0xda, 0x61, 0x12, 0x0a, 0x3b, 0x71, 0xb1, 0x1c, 0xfb,
-	0x6b, 0x6c, 0x35, 0xb1, 0x23, 0xdb, 0x69, 0xd7, 0x7f, 0xc1, 0xcf, 0xda, 0x71, 0x47, 0x8e, 0xd0,
-	0xfe, 0x0f, 0x84, 0x62, 0xa7, 0x55, 0x39, 0xb5, 0x9f, 0x9f, 0xf7, 0x79, 0x1d, 0xe9, 0x33, 0x7a,
-	0xaf, 0xa1, 0x24, 0x1b, 0xd0, 0x29, 0xe5, 0x44, 0x48, 0x93, 0x82, 0xe5, 0xa0, 0xa1, 0xa9, 0x52,
-	0xaa, 0xe4, 0x42, 0x14, 0xdd, 0x4f, 0x52, 0x6b, 0x65, 0x55, 0x18, 0x77, 0xe1, 0xc4, 0x87, 0x93,
-	0x7d, 0x38, 0xf1, 0xa9, 0xab, 0x51, 0xa1, 0x0a, 0xe5, 0xa2, 0x69, 0xfb, 0xcf, 0x5b, 0x57, 0xe3,
-	0x42, 0xa9, 0xa2, 0x84, 0xd4, 0x4d, 0x79, 0xb3, 0x48, 0x89, 0xdc, 0x78, 0xf4, 0xee, 0xef, 0x09,
-	0x1a, 0xcc, 0xdb, 0xae, 0xb9, 0x2b, 0x08, 0xc7, 0xa8, 0xef, 0xaa, 0xb1, 0x60, 0x51, 0x30, 0x09,
-	0xa6, 0x17, 0xd9, 0xb9, 0x9b, 0xef, 0x58, 0x38, 0x41, 0x43, 0xb0, 0x1c, 0x1f, 0xf0, 0x8b, 0x49,
-	0x30, 0x3d, 0xcd, 0x10, 0x58, 0x3e, 0xef, 0x12, 0x63, 0xd4, 0xd7, 0x35, 0xc5, 0x84, 0x31, 0x1d,
-	0x9d, 0x78, 0x59, 0xd7, 0xf4, 0x86, 0x31, 0x1d, 0xbe, 0x45, 0x43, 0xce, 0xd6, 0xb8, 0x92, 0x50,
-	0x29, 0x29, 0x68, 0x74, 0xea, 0xf0, 0x80, 0xb3, 0xf5, 0x7d, 0x77, 0xd4, 0xda, 0x6d, 0xa4, 0x26,
-	0x96, 0x47, 0x2f, 0xbd, 0xcd, 0xd9, 0xfa, 0x1b, 0xb1, 0x3c, 0x7c, 0x83, 0x06, 0x22, 0xf7, 0xc5,
-	0x60, 0x4c, 0x74, 0xe6, 0x28, 0x12, 0xb9, 0xeb, 0x06, 0x63, 0xc2, 0xcf, 0xe8, 0x52, 0x48, 0x61,
-	0x05, 0x29, 0xb1, 0x01, 0xc9, 0x30, 0xe5, 0x40, 0x97, 0xb5, 0x12, 0xd2, 0x46, 0xe7, 0xee, 0x33,
-	0x5f, 0x77, 0xf8, 0x3b, 0x48, 0x36, 0x3f, 0xc0, 0x63, 0x4f, 0x03, 0x5d, 0x1d, 0x7b, 0xfd, 0xff,
-	0xbc, 0x0c, 0xe8, 0xea, 0xc8, 0xbb, 0x46, 0x21, 0x48, 0x92, 0x97, 0x80, 0x19, 0xe4, 0x4d, 0x81,
-	0xad, 0x26, 0x14, 0xa2, 0x8b, 0x49, 0x30, 0xed, 0x67, 0xaf, 0x3c, 0xf9, 0xd2, 0x82, 0x87, 0xf6,
-	0x3c, 0xfc, 0x84, 0x2e, 0xc9, 0x0a, 0x34, 0x29, 0x00, 0xe7, 0xa5, 0xa2, 0x4b, 0x6c, 0x45, 0x05,
-	0xb8, 0x32, 0x40, 0x23, 0xe4, 0x6e, 0x19, 0x75, 0xf8, 0xb6, 0xa5, 0x0f, 0xa2, 0x82, 0x7b, 0x03,
-	0xb4, 0xd5, 0x2a, 0xf2, 0x88, 0x35, 0x58, 0xbd, 0xc1, 0x0b, 0xa5, 0xb1, 0x90, 0xb4, 0x6c, 0x8c,
-	0x50, 0x32, 0x1a, 0x78, 0xad, 0x22, 0x8f, 0x59, 0x4b, 0xbf, 0x2a, 0x7d, 0xb7, 0x67, 0xe1, 0x35,
-	0x3a, 0x33, 0xa2, 0x90, 0xa0, 0xa3, 0xe1, 0x24, 0x98, 0x0e, 0x3e, 0x8c, 0x12, 0xbf, 0xfe, 0x64,
-	0xbf, 0xfe, 0xe4, 0x46, 0x6e, 0xb2, 0x2e, 0x73, 0x4b, 0x9e, 0xfe, 0xc4, 0xbd, 0xa7, 0x6d, 0x1c,
-	0x3c, 0x6f, 0xe3, 0xe0, 0xf7, 0x36, 0x0e, 0x7e, 0xee, 0xe2, 0xde, 0xf3, 0x2e, 0xee, 0xfd, 0xda,
-	0xc5, 0xbd, 0x1f, 0xf3, 0x42, 0x58, 0xde, 0xe4, 0x09, 0x55, 0x55, 0xca, 0x88, 0x25, 0x6e, 0xf9,
-	0x25, 0xc9, 0x0f, 0xaf, 0x74, 0x26, 0x72, 0x3a, 0x73, 0x8f, 0x72, 0xe6, 0x58, 0x5a, 0x2f, 0x8b,
-	0xd4, 0xcd, 0x87, 0x48, 0x7e, 0xe6, 0x2e, 0xfe, 0xf8, 0x2f, 0x00, 0x00, 0xff, 0xff, 0x0e, 0x12,
-	0xcd, 0xba, 0xea, 0x02, 0x00, 0x00,
+	// 451 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x54, 0x92, 0x3f, 0x6f, 0xd3, 0x40,
+	0x18, 0xc6, 0x63, 0x5a, 0xd2, 0xf4, 0xc2, 0x80, 0xac, 0xa0, 0x3a, 0x1d, 0x8c, 0xc5, 0x14, 0x89,
+	0xc6, 0x96, 0x40, 0xb0, 0xb7, 0x46, 0x48, 0x1d, 0x58, 0x4c, 0x27, 0x96, 0xd3, 0xfd, 0x79, 0x73,
+	0x3e, 0xc5, 0xbe, 0xb3, 0xee, 0xce, 0x51, 0xf3, 0x2d, 0xf8, 0x48, 0x8c, 0x1d, 0x3b, 0x32, 0x42,
+	0xf2, 0x45, 0x90, 0xcf, 0x4e, 0x14, 0x26, 0xfb, 0xf5, 0xef, 0xf9, 0x3d, 0x7e, 0xa5, 0x3b, 0xf4,
+	0xde, 0x40, 0x45, 0xb6, 0x60, 0x32, 0x56, 0x12, 0xa9, 0x6c, 0x06, 0xae, 0x04, 0x03, 0x6d, 0x9d,
+	0x31, 0xad, 0x56, 0x52, 0x0c, 0x8f, 0xb4, 0x31, 0xda, 0xe9, 0x30, 0x1e, 0xc2, 0x69, 0x1f, 0x4e,
+	0x0f, 0xe1, 0xb4, 0x4f, 0x5d, 0xcf, 0x84, 0x16, 0xda, 0x47, 0xb3, 0xee, 0xad, 0xb7, 0xae, 0xe7,
+	0x42, 0x6b, 0x51, 0x41, 0xe6, 0x27, 0xda, 0xae, 0x32, 0xa2, 0xb6, 0x3d, 0x7a, 0xf7, 0xeb, 0x0c,
+	0x4d, 0xf3, 0xae, 0x2b, 0xf7, 0x05, 0xe1, 0x1c, 0x4d, 0x7c, 0x35, 0x96, 0x3c, 0x0a, 0x92, 0x60,
+	0x71, 0x59, 0x5c, 0xf8, 0xf9, 0x9e, 0x87, 0x09, 0x7a, 0x05, 0xae, 0xc4, 0x47, 0xfc, 0x22, 0x09,
+	0x16, 0xe7, 0x05, 0x02, 0x57, 0xe6, 0x43, 0x62, 0x8e, 0x26, 0xa6, 0x61, 0x98, 0x70, 0x6e, 0xa2,
+	0xb3, 0x5e, 0x36, 0x0d, 0xbb, 0xe5, 0xdc, 0x84, 0x37, 0x68, 0x6c, 0xa5, 0x50, 0x60, 0xa2, 0xf3,
+	0x24, 0x58, 0x4c, 0x3f, 0xcc, 0xd2, 0x7e, 0xa7, 0xf4, 0xb0, 0x53, 0x7a, 0xab, 0xb6, 0xc5, 0x90,
+	0x09, 0xdf, 0xa2, 0xa9, 0xa4, 0x7d, 0x11, 0x58, 0x1b, 0xbd, 0xf4, 0x5d, 0x48, 0x52, 0xdf, 0x05,
+	0xd6, 0x86, 0x9f, 0xd1, 0x95, 0x54, 0xd2, 0x49, 0x52, 0x61, 0x0b, 0x8a, 0x63, 0x56, 0x02, 0x5b,
+	0x37, 0x5a, 0x2a, 0x17, 0x8d, 0xfd, 0x5a, 0x6f, 0x06, 0xfc, 0x1d, 0x14, 0xcf, 0x8f, 0xf0, 0xd4,
+	0x33, 0xc0, 0x36, 0xa7, 0xde, 0xc5, 0x7f, 0x5e, 0x01, 0x6c, 0x73, 0xe2, 0xdd, 0xa0, 0x10, 0x14,
+	0xa1, 0x15, 0x60, 0x0e, 0xb4, 0x15, 0xd8, 0x19, 0xc2, 0x20, 0x9a, 0x24, 0xc1, 0x62, 0x52, 0xbc,
+	0xee, 0xc9, 0x97, 0x0e, 0x3c, 0x74, 0xdf, 0xc3, 0x4f, 0xe8, 0x8a, 0x6c, 0xc0, 0x10, 0x01, 0x98,
+	0x56, 0x9a, 0xad, 0xb1, 0x93, 0x35, 0xe0, 0xda, 0x02, 0x8b, 0x2e, 0xfd, 0x5f, 0x66, 0x03, 0xbe,
+	0xeb, 0xe8, 0x83, 0xac, 0xe1, 0x9b, 0x05, 0xd6, 0x69, 0x35, 0x79, 0xc4, 0x06, 0x9c, 0xd9, 0xe2,
+	0x95, 0x36, 0x58, 0x2a, 0x56, 0xb5, 0x56, 0x6a, 0x15, 0xa1, 0x5e, 0xab, 0xc9, 0x63, 0xd1, 0xd1,
+	0xaf, 0xda, 0xdc, 0x1f, 0xd8, 0x1d, 0x79, 0xfa, 0x1b, 0x8f, 0x9e, 0x76, 0x71, 0xf0, 0xbc, 0x8b,
+	0x83, 0x3f, 0xbb, 0x38, 0xf8, 0xb9, 0x8f, 0x47, 0xcf, 0xfb, 0x78, 0xf4, 0x7b, 0x1f, 0x8f, 0x7e,
+	0xe4, 0x42, 0xba, 0xb2, 0xa5, 0x29, 0xd3, 0x75, 0xc6, 0x89, 0x23, 0xfe, 0xf8, 0x2a, 0x42, 0x8f,
+	0xf7, 0x6c, 0x29, 0x29, 0x5b, 0xfa, 0x6b, 0xb5, 0xf4, 0x2c, 0x6b, 0xd6, 0x22, 0xf3, 0xf3, 0x31,
+	0x42, 0xc7, 0xfe, 0x94, 0x3e, 0xfe, 0x0b, 0x00, 0x00, 0xff, 0xff, 0x6c, 0x79, 0x79, 0x87, 0xac,
+	0x02, 0x00, 0x00,
 }
 
 func (m *ChainConfig) Marshal() (dAtA []byte, err error) {
@@ -136,27 +131,15 @@ func (m *ChainConfig) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if m.Signer != nil {
-		{
-			size, err := m.Signer.MarshalToSizedBuffer(dAtA[:i])
-			if err != nil {
-				return 0, err
-			}
-			i -= size
-			i = encodeVarintConfig(dAtA, i, uint64(size))
-		}
-		i--
-		dAtA[i] = 0x62
-	}
 	if m.MaxRetryForInclusion != 0 {
 		i = encodeVarintConfig(dAtA, i, uint64(m.MaxRetryForInclusion))
 		i--
-		dAtA[i] = 0x58
+		dAtA[i] = 0x50
 	}
 	if m.AverageBlockTimeMsec != 0 {
 		i = encodeVarintConfig(dAtA, i, uint64(m.AverageBlockTimeMsec))
 		i--
-		dAtA[i] = 0x50
+		dAtA[i] = 0x48
 	}
 	if m.EnableDebugTrace {
 		i--
@@ -166,36 +149,34 @@ func (m *ChainConfig) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 			dAtA[i] = 0
 		}
 		i--
-		dAtA[i] = 0x48
+		dAtA[i] = 0x40
 	}
 	if m.InitialRecvCheckpoint != 0 {
 		i = encodeVarintConfig(dAtA, i, uint64(m.InitialRecvCheckpoint))
 		i--
-		dAtA[i] = 0x40
+		dAtA[i] = 0x38
 	}
 	if m.InitialSendCheckpoint != 0 {
 		i = encodeVarintConfig(dAtA, i, uint64(m.InitialSendCheckpoint))
 		i--
-		dAtA[i] = 0x38
+		dAtA[i] = 0x30
 	}
 	if len(m.IbcAddress) > 0 {
 		i -= len(m.IbcAddress)
 		copy(dAtA[i:], m.IbcAddress)
 		i = encodeVarintConfig(dAtA, i, uint64(len(m.IbcAddress)))
 		i--
-		dAtA[i] = 0x32
-	}
-	if len(m.HdwPath) > 0 {
-		i -= len(m.HdwPath)
-		copy(dAtA[i:], m.HdwPath)
-		i = encodeVarintConfig(dAtA, i, uint64(len(m.HdwPath)))
-		i--
 		dAtA[i] = 0x2a
 	}
-	if len(m.HdwMnemonic) > 0 {
-		i -= len(m.HdwMnemonic)
-		copy(dAtA[i:], m.HdwMnemonic)
-		i = encodeVarintConfig(dAtA, i, uint64(len(m.HdwMnemonic)))
+	if m.Signer != nil {
+		{
+			size, err := m.Signer.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintConfig(dAtA, i, uint64(size))
+		}
 		i--
 		dAtA[i] = 0x22
 	}
@@ -249,12 +230,8 @@ func (m *ChainConfig) Size() (n int) {
 	if l > 0 {
 		n += 1 + l + sovConfig(uint64(l))
 	}
-	l = len(m.HdwMnemonic)
-	if l > 0 {
-		n += 1 + l + sovConfig(uint64(l))
-	}
-	l = len(m.HdwPath)
-	if l > 0 {
+	if m.Signer != nil {
+		l = m.Signer.Size()
 		n += 1 + l + sovConfig(uint64(l))
 	}
 	l = len(m.IbcAddress)
@@ -275,10 +252,6 @@ func (m *ChainConfig) Size() (n int) {
 	}
 	if m.MaxRetryForInclusion != 0 {
 		n += 1 + sovConfig(uint64(m.MaxRetryForInclusion))
-	}
-	if m.Signer != nil {
-		l = m.Signer.Size()
-		n += 1 + l + sovConfig(uint64(l))
 	}
 	return n
 }
@@ -403,198 +376,6 @@ func (m *ChainConfig) Unmarshal(dAtA []byte) error {
 			iNdEx = postIndex
 		case 4:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field HdwMnemonic", wireType)
-			}
-			var stringLen uint64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowConfig
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				stringLen |= uint64(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthConfig
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex < 0 {
-				return ErrInvalidLengthConfig
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.HdwMnemonic = string(dAtA[iNdEx:postIndex])
-			iNdEx = postIndex
-		case 5:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field HdwPath", wireType)
-			}
-			var stringLen uint64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowConfig
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				stringLen |= uint64(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthConfig
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex < 0 {
-				return ErrInvalidLengthConfig
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.HdwPath = string(dAtA[iNdEx:postIndex])
-			iNdEx = postIndex
-		case 6:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field IbcAddress", wireType)
-			}
-			var stringLen uint64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowConfig
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				stringLen |= uint64(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthConfig
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex < 0 {
-				return ErrInvalidLengthConfig
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.IbcAddress = string(dAtA[iNdEx:postIndex])
-			iNdEx = postIndex
-		case 7:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field InitialSendCheckpoint", wireType)
-			}
-			m.InitialSendCheckpoint = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowConfig
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				m.InitialSendCheckpoint |= uint64(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		case 8:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field InitialRecvCheckpoint", wireType)
-			}
-			m.InitialRecvCheckpoint = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowConfig
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				m.InitialRecvCheckpoint |= uint64(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		case 9:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field EnableDebugTrace", wireType)
-			}
-			var v int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowConfig
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				v |= int(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			m.EnableDebugTrace = bool(v != 0)
-		case 10:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field AverageBlockTimeMsec", wireType)
-			}
-			m.AverageBlockTimeMsec = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowConfig
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				m.AverageBlockTimeMsec |= uint64(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		case 11:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field MaxRetryForInclusion", wireType)
-			}
-			m.MaxRetryForInclusion = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowConfig
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				m.MaxRetryForInclusion |= uint64(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		case 12:
-			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Signer", wireType)
 			}
 			var msglen int
@@ -629,6 +410,134 @@ func (m *ChainConfig) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			iNdEx = postIndex
+		case 5:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field IbcAddress", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowConfig
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthConfig
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthConfig
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.IbcAddress = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 6:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field InitialSendCheckpoint", wireType)
+			}
+			m.InitialSendCheckpoint = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowConfig
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.InitialSendCheckpoint |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 7:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field InitialRecvCheckpoint", wireType)
+			}
+			m.InitialRecvCheckpoint = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowConfig
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.InitialRecvCheckpoint |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 8:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field EnableDebugTrace", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowConfig
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.EnableDebugTrace = bool(v != 0)
+		case 9:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field AverageBlockTimeMsec", wireType)
+			}
+			m.AverageBlockTimeMsec = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowConfig
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.AverageBlockTimeMsec |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 10:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field MaxRetryForInclusion", wireType)
+			}
+			m.MaxRetryForInclusion = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowConfig
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.MaxRetryForInclusion |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
 		default:
 			iNdEx = preIndex
 			skippy, err := skipConfig(dAtA[iNdEx:])
