@@ -2,26 +2,25 @@ syntax = "proto3";
 package relayer.chains.ethereum.config;
 
 import "gogoproto/gogo.proto";
+import "google/protobuf/any.proto";
 
 option go_package = "github.com/datachainlab/ethereum-ibc-relay-chain/pkg/relay/ethereum";
 option (gogoproto.goproto_getters_all) = false;
 
 message ChainConfig {
   string chain_id = 1;
-  uint64  eth_chain_id = 2;
+  uint64 eth_chain_id = 2;
   string rpc_addr = 3;
 
-  // use for relayer
-  string hdw_mnemonic = 4;
-  string hdw_path = 5;
+  google.protobuf.Any signer = 4;
 
-  string ibc_address = 6;
+  string ibc_address = 5;
 
-  uint64 initial_send_checkpoint = 7;
-  uint64 initial_recv_checkpoint = 8;
+  uint64 initial_send_checkpoint = 6;
+  uint64 initial_recv_checkpoint = 7;
 
-  bool enable_debug_trace = 9;
+  bool enable_debug_trace = 8;
 
-  uint64 average_block_time_msec = 10;
-  uint64 max_retry_for_inclusion = 11;
+  uint64 average_block_time_msec = 9;
+  uint64 max_retry_for_inclusion = 10;
 }
