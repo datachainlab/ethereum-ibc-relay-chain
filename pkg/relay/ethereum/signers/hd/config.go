@@ -5,16 +5,14 @@ import (
 	"math/big"
 
 	"github.com/datachainlab/ethereum-ibc-relay-chain/pkg/relay/ethereum"
+	"github.com/datachainlab/ethereum-ibc-relay-chain/pkg/wallet"
 )
 
 var _ ethereum.SignerConfig = (*SignerConfig)(nil)
 
 func (c *SignerConfig) Validate() error {
-	if len(c.Mnemonic) == 0 {
-		return fmt.Errorf("SignerConfig attribute \"mnemonic\" is empty")
-	}
-	if len(c.Path) == 0 {
-		return fmt.Errorf("SignerConfig attribute \"path\" is empty")
+	if _, err := wallet.GetPrvKeyFromMnemonicAndHDWPath(c.Mnemonic, c.Path); err != nil {
+		return fmt.Errorf("invalid mnemonic and/or path for HD wallet: %v", err)
 	}
 	return nil
 }

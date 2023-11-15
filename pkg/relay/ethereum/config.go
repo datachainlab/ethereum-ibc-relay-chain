@@ -40,8 +40,10 @@ func (c ChainConfig) Validate() error {
 	if c.MaxRetryForInclusion == 0 {
 		errs = append(errs, fmt.Errorf("config attribute \"max_retry_for_inclusion\" is zero"))
 	}
-	if err := c.Signer.GetCachedValue().(SignerConfig).Validate(); err != nil {
-		errs = append(errs, fmt.Errorf("signer config validation failed: %v", err))
+	if c.Signer == nil {
+		errs = append(errs, fmt.Errorf("config attribute \"signer\" is empty"))
+	} else if err := c.Signer.GetCachedValue().(SignerConfig).Validate(); err != nil {
+		errs = append(errs, fmt.Errorf("config attribute \"signer\" is invalid: %v", err))
 	}
 
 	return errors.Join(errs...)
