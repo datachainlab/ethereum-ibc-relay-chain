@@ -23,12 +23,38 @@ func (chain *Chain) CallOpts(ctx context.Context, height int64) *bind.CallOpts {
 }
 
 func (chain *Chain) TxOpts(ctx context.Context) *bind.TransactOpts {
+	logger := chain.GetChainLogger()
+
+	gasTipCap, err := chain.client.SuggestGasTipCap(ctx)
+	if err != nil {
+		logger.Warn("Since it failed to suggest GasTipCap, GasTipCap is set nil", "error", err)
+		gasTipCap = nil
+	} else {
+		gasTipCap.Mul(gasTipCap, big.NewInt(2))
+	}
+
+	var gasFeeCap *big.Int
+	if gasTipCap == nil {
+		logger.Warn("Since GasTipCap is nil, GasFeeCap is also set nil")
+	} else if head, err := chain.client.HeaderByNumber(ctx, nil); err != nil {
+		logger.Warn("Since it failed to get latest header, GasFeeCap is set nil", "error", err)
+	} else if head.BaseFee == nil {
+		logger.Warn("Since the base fee is nil, GasFeeCap is set nil")
+	} else {
+		gasFeeCap = new(big.Int).Add(
+			gasTipCap,
+			new(big.Int).Mul(head.BaseFee, big.NewInt(10)),
+		)
+	}
+
 	signer := gethtypes.LatestSignerForChainID(chain.chainID)
 	prv := chain.relayerPrvKey
 	addr := gethcrypto.PubkeyToAddress(prv.PublicKey)
 	return &bind.TransactOpts{
-		From:     addr,
-		GasLimit: 6382056,
+		From:      addr,
+		GasLimit:  6382056,
+		GasTipCap: gasTipCap,
+		GasFeeCap: gasFeeCap,
 		Signer: func(address common.Address, tx *gethtypes.Transaction) (*gethtypes.Transaction, error) {
 			logger := chain.GetChainLogger()
 			if address != addr {
