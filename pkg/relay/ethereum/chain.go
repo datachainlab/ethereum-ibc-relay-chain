@@ -317,7 +317,7 @@ func (c *Chain) QueryUnfinalizedRelayPackets(ctx core.QueryContext, counterparty
 		return nil, err
 	}
 
-	counterpartyHeader, err := counterparty.GetFinalizedHeader(0)
+	counterpartyHeader, err := counterparty.GetLatestFinalizedHeader()
 	if err != nil {
 		logger.Error("failed to get latest finalized header", err)
 		return nil, err
@@ -375,7 +375,7 @@ func (c *Chain) QueryUnfinalizedRelayAcknowledgements(ctx core.QueryContext, cou
 		return nil, err
 	}
 
-	counterpartyHeader, err := counterparty.GetFinalizedHeader(0)
+	counterpartyHeader, err := counterparty.GetLatestFinalizedHeader()
 	if err != nil {
 		logger.Error("failed to get latest finalized header", err)
 		return nil, err
