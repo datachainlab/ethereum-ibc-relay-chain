@@ -109,7 +109,7 @@ func (c *Chain) TxCreateClient(opts *bind.TransactOpts, msg *clienttypes.MsgCrea
 	if err != nil {
 		return nil, err
 	}
-	return c.ibcHandler.CreateClient(opts, ibchandler.IBCMsgsMsgCreateClient{
+	return c.ibcHandler.CreateClient(opts, ibchandler.IIBCClientMsgCreateClient{
 		ClientType:          clientState.ClientType(),
 		ClientStateBytes:    clientStateBytes,
 		ConsensusStateBytes: consensusStateBytes,
@@ -121,14 +121,14 @@ func (c *Chain) TxUpdateClient(opts *bind.TransactOpts, msg *clienttypes.MsgUpda
 	if err != nil {
 		return nil, err
 	}
-	return c.ibcHandler.UpdateClient(opts, ibchandler.IBCMsgsMsgUpdateClient{
+	return c.ibcHandler.UpdateClient(opts, ibchandler.IIBCClientMsgUpdateClient{
 		ClientId:      msg.ClientId,
 		ClientMessage: headerBytes,
 	})
 }
 
 func (c *Chain) TxConnectionOpenInit(opts *bind.TransactOpts, msg *conntypes.MsgConnectionOpenInit) (*gethtypes.Transaction, error) {
-	return c.ibcHandler.ConnectionOpenInit(opts, ibchandler.IBCMsgsMsgConnectionOpenInit{
+	return c.ibcHandler.ConnectionOpenInit(opts, ibchandler.IIBCConnectionMsgConnectionOpenInit{
 		ClientId: msg.ClientId,
 		Counterparty: ibchandler.CounterpartyData{
 			ClientId:     msg.Counterparty.ClientId,
@@ -148,7 +148,7 @@ func (c *Chain) TxConnectionOpenTry(opts *bind.TransactOpts, msg *conntypes.MsgC
 	for _, v := range msg.CounterpartyVersions {
 		versions = append(versions, ibchandler.VersionData(*v))
 	}
-	return c.ibcHandler.ConnectionOpenTry(opts, ibchandler.IBCMsgsMsgConnectionOpenTry{
+	return c.ibcHandler.ConnectionOpenTry(opts, ibchandler.IIBCConnectionMsgConnectionOpenTry{
 		Counterparty: ibchandler.CounterpartyData{
 			ClientId:     msg.Counterparty.ClientId,
 			ConnectionId: msg.Counterparty.ConnectionId,
@@ -171,7 +171,7 @@ func (c *Chain) TxConnectionOpenAck(opts *bind.TransactOpts, msg *conntypes.MsgC
 	if err != nil {
 		return nil, err
 	}
-	return c.ibcHandler.ConnectionOpenAck(opts, ibchandler.IBCMsgsMsgConnectionOpenAck{
+	return c.ibcHandler.ConnectionOpenAck(opts, ibchandler.IIBCConnectionMsgConnectionOpenAck{
 		ConnectionId:     msg.ConnectionId,
 		ClientStateBytes: clientStateBytes,
 		Version: ibchandler.VersionData{
@@ -188,7 +188,7 @@ func (c *Chain) TxConnectionOpenAck(opts *bind.TransactOpts, msg *conntypes.MsgC
 }
 
 func (c *Chain) TxConnectionOpenConfirm(opts *bind.TransactOpts, msg *conntypes.MsgConnectionOpenConfirm) (*gethtypes.Transaction, error) {
-	return c.ibcHandler.ConnectionOpenConfirm(opts, ibchandler.IBCMsgsMsgConnectionOpenConfirm{
+	return c.ibcHandler.ConnectionOpenConfirm(opts, ibchandler.IIBCConnectionMsgConnectionOpenConfirm{
 		ConnectionId: msg.ConnectionId,
 		ProofAck:     msg.ProofAck,
 		ProofHeight:  pbToHandlerHeight(msg.ProofHeight),
@@ -196,7 +196,7 @@ func (c *Chain) TxConnectionOpenConfirm(opts *bind.TransactOpts, msg *conntypes.
 }
 
 func (c *Chain) TxChannelOpenInit(opts *bind.TransactOpts, msg *chantypes.MsgChannelOpenInit) (*gethtypes.Transaction, error) {
-	return c.ibcHandler.ChannelOpenInit(opts, ibchandler.IBCMsgsMsgChannelOpenInit{
+	return c.ibcHandler.ChannelOpenInit(opts, ibchandler.IIBCChannelHandshakeMsgChannelOpenInit{
 		PortId: msg.PortId,
 		Channel: ibchandler.ChannelData{
 			State:          uint8(msg.Channel.State),
@@ -209,7 +209,7 @@ func (c *Chain) TxChannelOpenInit(opts *bind.TransactOpts, msg *chantypes.MsgCha
 }
 
 func (c *Chain) TxChannelOpenTry(opts *bind.TransactOpts, msg *chantypes.MsgChannelOpenTry) (*gethtypes.Transaction, error) {
-	return c.ibcHandler.ChannelOpenTry(opts, ibchandler.IBCMsgsMsgChannelOpenTry{
+	return c.ibcHandler.ChannelOpenTry(opts, ibchandler.IIBCChannelHandshakeMsgChannelOpenTry{
 		PortId: msg.PortId,
 		Channel: ibchandler.ChannelData{
 			State:          uint8(msg.Channel.State),
@@ -225,7 +225,7 @@ func (c *Chain) TxChannelOpenTry(opts *bind.TransactOpts, msg *chantypes.MsgChan
 }
 
 func (c *Chain) TxChannelOpenAck(opts *bind.TransactOpts, msg *chantypes.MsgChannelOpenAck) (*gethtypes.Transaction, error) {
-	return c.ibcHandler.ChannelOpenAck(opts, ibchandler.IBCMsgsMsgChannelOpenAck{
+	return c.ibcHandler.ChannelOpenAck(opts, ibchandler.IIBCChannelHandshakeMsgChannelOpenAck{
 		PortId:                msg.PortId,
 		ChannelId:             msg.ChannelId,
 		CounterpartyVersion:   msg.CounterpartyVersion,
@@ -236,7 +236,7 @@ func (c *Chain) TxChannelOpenAck(opts *bind.TransactOpts, msg *chantypes.MsgChan
 }
 
 func (c *Chain) TxChannelOpenConfirm(opts *bind.TransactOpts, msg *chantypes.MsgChannelOpenConfirm) (*gethtypes.Transaction, error) {
-	return c.ibcHandler.ChannelOpenConfirm(opts, ibchandler.IBCMsgsMsgChannelOpenConfirm{
+	return c.ibcHandler.ChannelOpenConfirm(opts, ibchandler.IIBCChannelHandshakeMsgChannelOpenConfirm{
 		PortId:      msg.PortId,
 		ChannelId:   msg.ChannelId,
 		ProofAck:    msg.ProofAck,
@@ -245,7 +245,7 @@ func (c *Chain) TxChannelOpenConfirm(opts *bind.TransactOpts, msg *chantypes.Msg
 }
 
 func (c *Chain) TxRecvPacket(opts *bind.TransactOpts, msg *chantypes.MsgRecvPacket) (*gethtypes.Transaction, error) {
-	return c.ibcHandler.RecvPacket(opts, ibchandler.IBCMsgsMsgPacketRecv{
+	return c.ibcHandler.RecvPacket(opts, ibchandler.IIBCChannelRecvPacketMsgPacketRecv{
 		Packet: ibchandler.PacketData{
 			Sequence:           msg.Packet.Sequence,
 			SourcePort:         msg.Packet.SourcePort,
@@ -262,7 +262,7 @@ func (c *Chain) TxRecvPacket(opts *bind.TransactOpts, msg *chantypes.MsgRecvPack
 }
 
 func (c *Chain) TxAcknowledgement(opts *bind.TransactOpts, msg *chantypes.MsgAcknowledgement) (*gethtypes.Transaction, error) {
-	return c.ibcHandler.AcknowledgePacket(opts, ibchandler.IBCMsgsMsgPacketAcknowledgement{
+	return c.ibcHandler.AcknowledgePacket(opts, ibchandler.IIBCChannelAcknowledgePacketMsgPacketAcknowledgement{
 		Packet: ibchandler.PacketData{
 			Sequence:           msg.Packet.Sequence,
 			SourcePort:         msg.Packet.SourcePort,

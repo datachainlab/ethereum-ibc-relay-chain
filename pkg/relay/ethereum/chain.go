@@ -15,13 +15,20 @@ import (
 	conntypes "github.com/cosmos/ibc-go/v7/modules/core/03-connection/types"
 	chantypes "github.com/cosmos/ibc-go/v7/modules/core/04-channel/types"
 	committypes "github.com/cosmos/ibc-go/v7/modules/core/23-commitment/types"
+	host "github.com/cosmos/ibc-go/v7/modules/core/24-host"
 	ibcexported "github.com/cosmos/ibc-go/v7/modules/core/exported"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/hyperledger-labs/yui-relayer/core"
 	"github.com/hyperledger-labs/yui-relayer/log"
 
 	"github.com/datachainlab/ethereum-ibc-relay-chain/pkg/client"
 	"github.com/datachainlab/ethereum-ibc-relay-chain/pkg/contract/ibchandler"
+)
+
+const (
+	PACKET_RECEIPT_NONE       uint8 = 0
+	PACKET_RECEIPT_SUCCESSFUL uint8 = 1
 )
 
 type Chain struct {
@@ -277,9 +284,15 @@ func (c *Chain) QueryUnreceivedPackets(ctx core.QueryContext, seqs []uint64) ([]
 		// With ORDERED channel, since IBC impls don't record receipts, we need to check nextSequenceRecv.
 		switch c.Path().GetOrder() {
 		case chantypes.UNORDERED:
-			if received, err = c.ibcHandler.HasPacketReceipt(c.callOptsFromQueryContext(ctx), c.pathEnd.PortID, c.pathEnd.ChannelID, seq); err != nil {
+			if rc, err := c.ibcHandler.GetPacketReceipt(c.callOptsFromQueryContext(ctx), c.pathEnd.PortID, c.pathEnd.ChannelID, seq); err != nil {
 				logger.Error("failed to get packet receipt", err)
 				return nil, err
+			} else if rc == PACKET_RECEIPT_SUCCESSFUL {
+				received = true
+			} else if rc == PACKET_RECEIPT_NONE {
+				received = false
+			} else {
+				return nil, fmt.Errorf("unknown receipt: %d", rc)
 			}
 		case chantypes.ORDERED:
 			if nextSequenceRecv == 0 {
@@ -349,11 +362,12 @@ func (c *Chain) QueryUnreceivedAcknowledgements(ctx core.QueryContext, seqs []ui
 	logger := c.GetChannelLogger()
 	var ret []uint64
 	for _, seq := range seqs {
-		_, found, err := c.ibcHandler.GetHashedPacketCommitment(c.callOptsFromQueryContext(ctx), c.pathEnd.PortID, c.pathEnd.ChannelID, seq)
+		key := crypto.Keccak256Hash(host.PacketCommitmentKey(c.pathEnd.PortID, c.pathEnd.ChannelID, seq))
+		commitment, err := c.ibcHandler.GetCommitment(c.callOptsFromQueryContext(ctx), key)
 		if err != nil {
 			logger.Error("failed to get hashed packet commitment", err)
 			return nil, err
-		} else if found {
+		} else if commitment != [32]byte{} {
 			ret = append(ret, seq)
 		}
 	}
