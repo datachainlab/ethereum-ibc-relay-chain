@@ -25,10 +25,9 @@ func (chain *Chain) TxOpts(ctx context.Context) (*bind.TransactOpts, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to call eth_maxPriorityFeePerGas: %v", err)
 	}
-	gasTipCap.Mul(gasTipCap, new(big.Int).SetUint64(chain.config.PriorityFeeRate.Numerator))
-	gasTipCap.Div(gasTipCap, new(big.Int).SetUint64(chain.config.PriorityFeeRate.Denominator))
-	if limit := new(big.Int).SetUint64(chain.config.LimitPriorityFeePerGas); gasTipCap.Cmp(limit) > 0 {
-		gasTipCap.Set(limit)
+	chain.config.PriorityFeeRate.Mul(gasTipCap)
+	if l := chain.config.GetLimitPriorityFeePerGas(); l.Sign() > 0 && gasTipCap.Cmp(l) > 0 {
+		gasTipCap = l
 	}
 
 	// GasFeeCap = min(LimitFeePerGas, GasTipCap + BaseFee * BaseFeeRate)
@@ -36,11 +35,11 @@ func (chain *Chain) TxOpts(ctx context.Context) (*bind.TransactOpts, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch the latest header: %v", err)
 	}
-	gasFeeCap := new(big.Int).Mul(head.BaseFee, new(big.Int).SetUint64(chain.config.BaseFeeRate.Numerator))
-	gasFeeCap.Div(gasFeeCap, new(big.Int).SetUint64(chain.config.BaseFeeRate.Denominator))
+	gasFeeCap := head.BaseFee
+	chain.config.BaseFeeRate.Mul(gasFeeCap)
 	gasFeeCap.Add(gasFeeCap, gasTipCap)
-	if limit := new(big.Int).SetUint64(chain.config.LimitFeePerGas); gasFeeCap.Cmp(limit) > 0 {
-		gasFeeCap.Set(limit)
+	if l := chain.config.GetLimitFeePerGas(); l.Sign() > 0 && gasFeeCap.Cmp(l) > 0 {
+		gasFeeCap = l
 	}
 
 	return &bind.TransactOpts{

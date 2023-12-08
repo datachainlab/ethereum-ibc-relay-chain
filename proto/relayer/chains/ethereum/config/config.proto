@@ -24,9 +24,9 @@ message ChainConfig {
   uint64 average_block_time_msec = 9;
   uint64 max_retry_for_inclusion = 10;
 
-  uint64 limit_priority_fee_per_gas = 11;
+  string limit_priority_fee_per_gas = 11;
   Fraction priority_fee_rate = 12;
-  uint64 limit_fee_per_gas = 13;
+  string limit_fee_per_gas = 13;
   Fraction base_fee_rate = 14;
 }
 
