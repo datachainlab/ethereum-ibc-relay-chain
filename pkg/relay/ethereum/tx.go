@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
+	"github.com/avast/retry-go"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/gogoproto/proto"
 	clienttypes "github.com/cosmos/ibc-go/v7/modules/core/02-client/types"
@@ -18,6 +20,11 @@ import (
 	"github.com/datachainlab/ethereum-ibc-relay-chain/pkg/contract/ibchandler"
 )
 
+const (
+	txOptsRetryDelay    = time.Second
+	txOptsRetryAttempts = 10
+)
+
 // SendMsgs sends msgs to the chain
 func (c *Chain) SendMsgs(msgs []sdk.Msg) ([]core.MsgID, error) {
 	logger := c.GetChainLogger()
@@ -28,7 +35,15 @@ func (c *Chain) SendMsgs(msgs []sdk.Msg) ([]core.MsgID, error) {
 			err error
 		)
 		ctx := context.Background()
-		opts := c.TxOpts(ctx)
+		var opts *bind.TransactOpts
+		if err := retry.Do(func() error {
+			var err error
+			opts, err = c.TxOpts(ctx)
+			return err
+		}, retry.Delay(txOptsRetryDelay), retry.Attempts(txOptsRetryAttempts)); err != nil {
+			return nil, fmt.Errorf("failed to prepare TransactOpts: %v", err)
+		}
+
 		switch msg := msg.(type) {
 		case *clienttypes.MsgCreateClient:
 			tx, err = c.TxCreateClient(opts, msg)
