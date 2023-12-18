@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/gogoproto/proto"
@@ -11,6 +12,7 @@ import (
 	conntypes "github.com/cosmos/ibc-go/v7/modules/core/03-connection/types"
 	chantypes "github.com/cosmos/ibc-go/v7/modules/core/04-channel/types"
 	"github.com/cosmos/ibc-go/v7/modules/core/exported"
+	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	gethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/hyperledger-labs/yui-relayer/core"
@@ -29,41 +31,29 @@ func (c *Chain) SendMsgs(msgs []sdk.Msg) ([]core.MsgID, error) {
 		)
 		ctx := context.Background()
 		opts := c.TxOpts(ctx)
-		switch msg := msg.(type) {
-		case *clienttypes.MsgCreateClient:
-			tx, err = c.TxCreateClient(opts, msg)
-		case *clienttypes.MsgUpdateClient:
-			tx, err = c.TxUpdateClient(opts, msg)
-		case *conntypes.MsgConnectionOpenInit:
-			tx, err = c.TxConnectionOpenInit(opts, msg)
-		case *conntypes.MsgConnectionOpenTry:
-			tx, err = c.TxConnectionOpenTry(opts, msg)
-		case *conntypes.MsgConnectionOpenAck:
-			tx, err = c.TxConnectionOpenAck(opts, msg)
-		case *conntypes.MsgConnectionOpenConfirm:
-			tx, err = c.TxConnectionOpenConfirm(opts, msg)
-		case *chantypes.MsgChannelOpenInit:
-			tx, err = c.TxChannelOpenInit(opts, msg)
-		case *chantypes.MsgChannelOpenTry:
-			tx, err = c.TxChannelOpenTry(opts, msg)
-		case *chantypes.MsgChannelOpenAck:
-			tx, err = c.TxChannelOpenAck(opts, msg)
-		case *chantypes.MsgChannelOpenConfirm:
-			tx, err = c.TxChannelOpenConfirm(opts, msg)
-		case *chantypes.MsgRecvPacket:
-			tx, err = c.TxRecvPacket(opts, msg)
-		case *chantypes.MsgAcknowledgement:
-			tx, err = c.TxAcknowledgement(opts, msg)
-		// case *transfertypes.MsgTransfer:
-		// 	err = c.client.transfer(msg)
-		default:
-			logger.Error("failed to send msg", errors.New("illegal msg type"), "msg", msg)
-			panic("illegal msg type")
-		}
+		opts.GasLimit = math.MaxUint64
+		tx, err = c.SendTx(opts, msg, true)
 		if err != nil {
-			logger.Error("failed to send msg", err, "msg", msg)
+			logger.Error("failed to send msg / NoSend: true", err, "msg", msg)
 			return nil, err
 		}
+		estimatedGas, err := c.EstimateGas(ctx, tx)
+		if err != nil {
+			logger.Error("failed to estimate gas", err, "msg", msg)
+			return nil, err
+		}
+
+		txGasLimit := uint64(float64(estimatedGas) * c.Config().GasEstimateMultiplier)
+		if txGasLimit > c.Config().MaxGasLimit {
+			return nil, fmt.Errorf("estimated gas %d exceeds max gas limit %d", txGasLimit, c.Config().MaxGasLimit)
+		}
+		opts.GasLimit = txGasLimit
+		tx, err = c.SendTx(opts, msg, false)
+		if err != nil {
+			logger.Error("failed to send msg / NoSend: false", err, "msg", msg)
+			return nil, err
+		}
+
 		if receipt, revertReason, err := c.client.WaitForReceiptAndGet(ctx, tx.Hash(), c.config.EnableDebugTrace); err != nil {
 			logger.Error("failed to get receipt", err, "msg", msg)
 			return nil, err
@@ -277,4 +267,70 @@ func (c *Chain) TxAcknowledgement(opts *bind.TransactOpts, msg *chantypes.MsgAck
 		Proof:           msg.ProofAcked,
 		ProofHeight:     pbToHandlerHeight(msg.ProofHeight),
 	})
+}
+
+func (c *Chain) SendTx(opts *bind.TransactOpts, msg sdk.Msg, noSend bool) (*gethtypes.Transaction, error) {
+	logger := c.GetChainLogger()
+	opts.NoSend = noSend
+	var (
+		tx  *gethtypes.Transaction
+		err error
+	)
+	switch msg := msg.(type) {
+	case *clienttypes.MsgCreateClient:
+		tx, err = c.TxCreateClient(opts, msg)
+	case *clienttypes.MsgUpdateClient:
+		tx, err = c.TxUpdateClient(opts, msg)
+	case *conntypes.MsgConnectionOpenInit:
+		tx, err = c.TxConnectionOpenInit(opts, msg)
+	case *conntypes.MsgConnectionOpenTry:
+		tx, err = c.TxConnectionOpenTry(opts, msg)
+	case *conntypes.MsgConnectionOpenAck:
+		tx, err = c.TxConnectionOpenAck(opts, msg)
+	case *conntypes.MsgConnectionOpenConfirm:
+		tx, err = c.TxConnectionOpenConfirm(opts, msg)
+	case *chantypes.MsgChannelOpenInit:
+		tx, err = c.TxChannelOpenInit(opts, msg)
+	case *chantypes.MsgChannelOpenTry:
+		tx, err = c.TxChannelOpenTry(opts, msg)
+	case *chantypes.MsgChannelOpenAck:
+		tx, err = c.TxChannelOpenAck(opts, msg)
+	case *chantypes.MsgChannelOpenConfirm:
+		tx, err = c.TxChannelOpenConfirm(opts, msg)
+	case *chantypes.MsgRecvPacket:
+		tx, err = c.TxRecvPacket(opts, msg)
+	case *chantypes.MsgAcknowledgement:
+		tx, err = c.TxAcknowledgement(opts, msg)
+	// case *transfertypes.MsgTransfer:
+	// 	err = c.client.transfer(msg)
+	default:
+		logger.Error("failed to send msg", errors.New("illegal msg type"), "msg", msg)
+		panic("illegal msg type")
+	}
+	return tx, err
+}
+
+func (c *Chain) EstimateGas(ctx context.Context, tx *gethtypes.Transaction) (uint64, error) {
+	from, err := gethtypes.Sender(gethtypes.NewEIP155Signer(tx.ChainId()), tx)
+	if err != nil {
+		return 0, err
+	}
+	to := tx.To()
+	value := tx.Value()
+	gas := tx.Gas()
+	gasPrice := tx.GasPrice()
+	data := tx.Data()
+	callMsg := ethereum.CallMsg{
+		From:     from,
+		To:       to,
+		Gas:      gas,
+		GasPrice: gasPrice,
+		Value:    value,
+		Data:     data,
+	}
+	estimatedGas, err := c.client.EstimateGas(ctx, callMsg)
+	if err != nil {
+		return 0, err
+	}
+	return estimatedGas, nil
 }

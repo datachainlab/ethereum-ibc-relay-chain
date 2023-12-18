@@ -23,4 +23,7 @@ message ChainConfig {
 
   uint64 average_block_time_msec = 9;
   uint64 max_retry_for_inclusion = 10;
+
+  double gas_estimate_multiplier = 11;
+  uint64 max_gas_limit = 12;
 }

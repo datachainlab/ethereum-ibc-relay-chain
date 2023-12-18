@@ -21,7 +21,7 @@ func (chain *Chain) CallOpts(ctx context.Context, height int64) *bind.CallOpts {
 func (chain *Chain) TxOpts(ctx context.Context) *bind.TransactOpts {
 	return &bind.TransactOpts{
 		From:     chain.signer.Address(),
-		GasLimit: 6382056,
+		GasLimit: 0,
 		Signer:   chain.signer.Sign,
 	}
 }
