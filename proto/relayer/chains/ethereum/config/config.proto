@@ -23,4 +23,12 @@ message ChainConfig {
 
   uint64 average_block_time_msec = 9;
   uint64 max_retry_for_inclusion = 10;
+
+  Fraction gas_estimate_rate = 11;
+  uint64 max_gas_limit = 12;
+}
+
+message Fraction {
+  uint64 numerator   = 1;
+  uint64 denominator = 2;
 }
