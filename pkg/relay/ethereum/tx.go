@@ -12,7 +12,6 @@ import (
 	conntypes "github.com/cosmos/ibc-go/v7/modules/core/03-connection/types"
 	chantypes "github.com/cosmos/ibc-go/v7/modules/core/04-channel/types"
 	"github.com/cosmos/ibc-go/v7/modules/core/exported"
-	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	gethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/hyperledger-labs/yui-relayer/core"
@@ -32,23 +31,25 @@ func (c *Chain) SendMsgs(msgs []sdk.Msg) ([]core.MsgID, error) {
 		ctx := context.Background()
 		opts := c.TxOpts(ctx)
 		opts.GasLimit = math.MaxUint64
-		tx, err = c.SendTx(opts, msg, true)
+		opts.NoSend = true
+		tx, err = c.SendTx(opts, msg)
 		if err != nil {
 			logger.Error("failed to send msg / NoSend: true", err, "msg", msg)
 			return nil, err
 		}
-		estimatedGas, err := c.EstimateGas(ctx, tx)
+		estimatedGas, err := c.client.EstimateGasFromTx(ctx, tx)
 		if err != nil {
 			logger.Error("failed to estimate gas", err, "msg", msg)
 			return nil, err
 		}
-
-		txGasLimit := uint64(float64(estimatedGas) * c.Config().GasEstimateMultiplier)
+		txGasLimit := estimatedGas * c.Config().GasEstimateRate.Numerator / c.Config().GasEstimateRate.Denominator
 		if txGasLimit > c.Config().MaxGasLimit {
-			return nil, fmt.Errorf("estimated gas %d exceeds max gas limit %d", txGasLimit, c.Config().MaxGasLimit)
+			logger.Warn("estimated gas exceeds max gas limit", "estimated_gas", txGasLimit, "max_gas_limit", c.Config().MaxGasLimit)
+			txGasLimit = c.Config().MaxGasLimit
 		}
 		opts.GasLimit = txGasLimit
-		tx, err = c.SendTx(opts, msg, false)
+		opts.NoSend = false
+		tx, err = c.SendTx(opts, msg)
 		if err != nil {
 			logger.Error("failed to send msg / NoSend: false", err, "msg", msg)
 			return nil, err
@@ -269,9 +270,8 @@ func (c *Chain) TxAcknowledgement(opts *bind.TransactOpts, msg *chantypes.MsgAck
 	})
 }
 
-func (c *Chain) SendTx(opts *bind.TransactOpts, msg sdk.Msg, noSend bool) (*gethtypes.Transaction, error) {
+func (c *Chain) SendTx(opts *bind.TransactOpts, msg sdk.Msg) (*gethtypes.Transaction, error) {
 	logger := c.GetChainLogger()
-	opts.NoSend = noSend
 	var (
 		tx  *gethtypes.Transaction
 		err error
@@ -308,29 +308,4 @@ func (c *Chain) SendTx(opts *bind.TransactOpts, msg sdk.Msg, noSend bool) (*geth
 		panic("illegal msg type")
 	}
 	return tx, err
-}
-
-func (c *Chain) EstimateGas(ctx context.Context, tx *gethtypes.Transaction) (uint64, error) {
-	from, err := gethtypes.Sender(gethtypes.NewEIP155Signer(tx.ChainId()), tx)
-	if err != nil {
-		return 0, err
-	}
-	to := tx.To()
-	value := tx.Value()
-	gas := tx.Gas()
-	gasPrice := tx.GasPrice()
-	data := tx.Data()
-	callMsg := ethereum.CallMsg{
-		From:     from,
-		To:       to,
-		Gas:      gas,
-		GasPrice: gasPrice,
-		Value:    value,
-		Data:     data,
-	}
-	estimatedGas, err := c.client.EstimateGas(ctx, callMsg)
-	if err != nil {
-		return 0, err
-	}
-	return estimatedGas, nil
 }
