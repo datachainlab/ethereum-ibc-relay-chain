@@ -23,4 +23,21 @@ message ChainConfig {
 
   uint64 average_block_time_msec = 9;
   uint64 max_retry_for_inclusion = 10;
+
+  ReplaceConfig replaceConfig = 11;
+}
+
+message ReplaceConfig {
+  uint64 pendingDurationToReplace = 1;
+  uint64 checkInterval = 2;
+
+  // for DynamicTx, BlobTx
+  string gasTipCapInc = 3;
+  string maxGasTipCap = 4;
+  string gasFeeCapInc = 5;
+  string maxGasFeeCap = 6;
+
+  // for LegacyTx, AccessListTx
+  string gasPriceInc = 7;
+  string maxGasPrice = 8;
 }
