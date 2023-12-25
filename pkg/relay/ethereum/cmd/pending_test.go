@@ -1,8 +1,6 @@
 package cmd
 
 import (
-	"github.com/datachainlab/ethereum-ibc-relay-chain/pkg/relay/ethereum"
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/holiman/uint256"
 	"math/big"
@@ -11,13 +9,13 @@ import (
 
 func TestSuccessCopyTxData(t *testing.T) {
 	model := pendingModel{}
-	opts := ethereum.ReplaceConfig{
-		GasTipCapInc: common.Bytes2Hex(big.NewInt(10).Bytes()),
-		MaxGasTipCap: common.Bytes2Hex(big.NewInt(1000).Bytes()),
-		GasFeeCapInc: common.Bytes2Hex(big.NewInt(100).Bytes()),
-		MaxGasFeeCap: common.Bytes2Hex(big.NewInt(10000).Bytes()),
-		GasPriceInc:  common.Bytes2Hex(big.NewInt(200).Bytes()),
-		MaxGasPrice:  common.Bytes2Hex(big.NewInt(20000).Bytes()),
+	opts := gasInfo{
+		GasTipCapInc: big.NewInt(10),
+		MaxGasTipCap: big.NewInt(1000),
+		GasFeeCapInc: big.NewInt(100),
+		MaxGasFeeCap: big.NewInt(10000),
+		GasPriceInc:  big.NewInt(200),
+		MaxGasPrice:  big.NewInt(20000),
 	}
 
 	// Legacy Tx
@@ -88,13 +86,13 @@ func TestSuccessCopyTxData(t *testing.T) {
 
 func TestErrorCopyTxData(t *testing.T) {
 	model := pendingModel{}
-	opts := ethereum.ReplaceConfig{
-		GasTipCapInc: common.Bytes2Hex(big.NewInt(10).Bytes()),
-		MaxGasTipCap: common.Bytes2Hex(big.NewInt(1000).Bytes()),
-		GasFeeCapInc: common.Bytes2Hex(big.NewInt(100).Bytes()),
-		MaxGasFeeCap: common.Bytes2Hex(big.NewInt(10000).Bytes()),
-		GasPriceInc:  common.Bytes2Hex(big.NewInt(200).Bytes()),
-		MaxGasPrice:  common.Bytes2Hex(big.NewInt(20000).Bytes()),
+	opts := gasInfo{
+		GasTipCapInc: big.NewInt(10),
+		MaxGasTipCap: big.NewInt(1000),
+		GasFeeCapInc: big.NewInt(100),
+		MaxGasFeeCap: big.NewInt(10000),
+		GasPriceInc:  big.NewInt(200),
+		MaxGasPrice:  big.NewInt(20000),
 	}
 
 	// Legacy Tx

@@ -98,6 +98,15 @@ type txPoolContent struct {
 	Pending pendingTransactions `json:"pending"`
 }
 
+type gasInfo struct {
+	GasPriceInc  *big.Int
+	MaxGasPrice  *big.Int
+	GasTipCapInc *big.Int
+	MaxGasTipCap *big.Int
+	GasFeeCapInc *big.Int
+	MaxGasFeeCap *big.Int
+}
+
 // Business Logic for pending command
 type pendingModel struct {
 	ethChain *ethereum.Chain
@@ -157,7 +166,42 @@ func (m *pendingModel) listPendingTx() (pendingTransactions, error) {
 
 func (m *pendingModel) replacePendingTx(tx *types.Transaction) error {
 	client := m.ethChain.Client()
-	txData, err := m.copyTxData(tx, *m.ethChain.Config().ReplaceConfig)
+	cfg := *m.ethChain.Config().ReplaceConfig
+
+	// string -> big.Int
+	gasPriceInc, err := m.strToBig(cfg.GasPriceInc)
+	if err != nil {
+		return err
+	}
+	maxGasPrice, err := m.strToBig(cfg.MaxGasPrice)
+	if err != nil {
+		return err
+	}
+	gasTipCapInc, err := m.strToBig(cfg.GasTipCapInc)
+	if err != nil {
+		return err
+	}
+	maxGasTipCap, err := m.strToBig(cfg.MaxGasTipCap)
+	if err != nil {
+		return err
+	}
+	gasFeeCapInc, err := m.strToBig(cfg.GasFeeCapInc)
+	if err != nil {
+		return err
+	}
+	maxGasFeeCap, err := m.strToBig(cfg.MaxGasFeeCap)
+	if err != nil {
+		return err
+	}
+
+	txData, err := m.copyTxData(tx, gasInfo{
+		GasPriceInc:  gasPriceInc,
+		MaxGasPrice:  maxGasPrice,
+		GasTipCapInc: gasTipCapInc,
+		MaxGasTipCap: maxGasTipCap,
+		GasFeeCapInc: gasFeeCapInc,
+		MaxGasFeeCap: maxGasFeeCap,
+	})
 	if err != nil {
 		return err
 	}
@@ -182,13 +226,12 @@ func (m *pendingModel) replacePendingTx(tx *types.Transaction) error {
 	return nil
 }
 
-func (m *pendingModel) copyTxData(src *types.Transaction, opts ethereum.ReplaceConfig) (types.TxData, error) {
+func (m *pendingModel) copyTxData(src *types.Transaction, gas gasInfo) (types.TxData, error) {
 	switch src.Type() {
 	case types.AccessListTxType:
-		gasPrice := m.addHex(src.GasPrice(), opts.GasPriceInc)
-		maxGasPrice := m.hexToBig(opts.MaxGasPrice)
-		if gasPrice.Cmp(maxGasPrice) > 0 {
-			return nil, fmt.Errorf("gasPrice > max : AccessListTx value=%v,max=%v", gasPrice, maxGasPrice)
+		gasPrice := m.add(src.GasPrice(), gas.GasPriceInc)
+		if gasPrice.Cmp(gas.MaxGasPrice) > 0 {
+			return nil, fmt.Errorf("gasPrice > max : AccessListTx value=%v,max=%v", gasPrice, gas.MaxGasPrice)
 		}
 		return &types.AccessListTx{
 			Nonce:    src.Nonce(),
@@ -199,15 +242,13 @@ func (m *pendingModel) copyTxData(src *types.Transaction, opts ethereum.ReplaceC
 			Data:     src.Data(),
 		}, nil
 	case types.DynamicFeeTxType:
-		gasTipCap := m.addHex(src.GasTipCap(), opts.GasTipCapInc)
-		maxGasTipCap := m.hexToBig(opts.MaxGasTipCap)
-		if gasTipCap.Cmp(maxGasTipCap) > 0 {
-			return nil, fmt.Errorf("gasTipCap > max : DynamicFeeTx value=%v,max=%v", gasTipCap, maxGasTipCap)
+		gasTipCap := m.add(src.GasTipCap(), gas.GasTipCapInc)
+		if gasTipCap.Cmp(gas.MaxGasTipCap) > 0 {
+			return nil, fmt.Errorf("gasTipCap > max : DynamicFeeTx value=%v,max=%v", gasTipCap, gas.MaxGasTipCap)
 		}
-		gasFeeCap := m.addHex(src.GasFeeCap(), opts.GasFeeCapInc)
-		maxGasFeeCap := m.hexToBig(opts.MaxGasFeeCap)
-		if gasFeeCap.Cmp(maxGasFeeCap) > 0 {
-			return nil, fmt.Errorf("gasFeeCap > max : DynamicFeeTx value=%v,max=%v", gasFeeCap, maxGasFeeCap)
+		gasFeeCap := m.add(src.GasFeeCap(), gas.GasFeeCapInc)
+		if gasFeeCap.Cmp(gas.MaxGasFeeCap) > 0 {
+			return nil, fmt.Errorf("gasFeeCap > max : DynamicFeeTx value=%v,max=%v", gasFeeCap, gas.MaxGasFeeCap)
 		}
 		return &types.DynamicFeeTx{
 			ChainID:    src.ChainId(),
@@ -221,15 +262,13 @@ func (m *pendingModel) copyTxData(src *types.Transaction, opts ethereum.ReplaceC
 			AccessList: src.AccessList(),
 		}, nil
 	case types.BlobTxType:
-		gasTipCap := m.addHex(src.GasTipCap(), opts.GasTipCapInc)
-		maxGasTipCap := m.hexToBig(opts.MaxGasTipCap)
-		if gasTipCap.Cmp(maxGasTipCap) > 0 {
-			return nil, fmt.Errorf("gasTipCap > max : BlobTx value=%v,max=%v", gasTipCap, maxGasTipCap)
+		gasTipCap := m.add(src.GasTipCap(), gas.GasTipCapInc)
+		if gasTipCap.Cmp(gas.MaxGasTipCap) > 0 {
+			return nil, fmt.Errorf("gasTipCap > max : BlobTx value=%v,max=%v", gasTipCap, gas.MaxGasTipCap)
 		}
-		gasFeeCap := m.addHex(src.GasFeeCap(), opts.GasFeeCapInc)
-		maxGasFeeCap := m.hexToBig(opts.MaxGasFeeCap)
-		if gasFeeCap.Cmp(maxGasFeeCap) > 0 {
-			return nil, fmt.Errorf("gasFeeCap > max : BlobTx value=%v,max=%v", gasFeeCap, maxGasFeeCap)
+		gasFeeCap := m.add(src.GasFeeCap(), gas.GasFeeCapInc)
+		if gasFeeCap.Cmp(gas.MaxGasFeeCap) > 0 {
+			return nil, fmt.Errorf("gasFeeCap > max : BlobTx value=%v,max=%v", gasFeeCap, gas.MaxGasFeeCap)
 		}
 		return &types.BlobTx{
 			ChainID:    uint256.MustFromBig(src.ChainId()),
@@ -246,10 +285,9 @@ func (m *pendingModel) copyTxData(src *types.Transaction, opts ethereum.ReplaceC
 		}, nil
 
 	default:
-		gasPrice := m.addHex(src.GasPrice(), opts.GasPriceInc)
-		maxGasPrice := m.hexToBig(opts.MaxGasPrice)
-		if gasPrice.Cmp(maxGasPrice) > 0 {
-			return nil, fmt.Errorf("gasPrice > max : LegacyTx value=%v,max=%v", gasPrice, maxGasPrice)
+		gasPrice := m.add(src.GasPrice(), gas.GasPriceInc)
+		if gasPrice.Cmp(gas.MaxGasPrice) > 0 {
+			return nil, fmt.Errorf("gasPrice > max : LegacyTx value=%v,max=%v", gasPrice, gas.MaxGasPrice)
 		}
 		return &types.LegacyTx{
 			Nonce:    src.Nonce(),
@@ -262,10 +300,14 @@ func (m *pendingModel) copyTxData(src *types.Transaction, opts ethereum.ReplaceC
 	}
 }
 
-func (m *pendingModel) addHex(x *big.Int, y string) *big.Int {
-	return new(big.Int).Add(x, m.hexToBig(y))
+func (m *pendingModel) add(x *big.Int, y *big.Int) *big.Int {
+	return new(big.Int).Add(x, y)
 }
 
-func (m *pendingModel) hexToBig(hex string) *big.Int {
-	return new(big.Int).SetBytes(common.FromHex(hex))
+func (m *pendingModel) strToBig(amount string) (*big.Int, error) {
+	value, result := new(big.Int).SetString(amount, 10)
+	if !result {
+		return nil, fmt.Errorf("invalid amount %s", amount)
+	}
+	return value, nil
 }
