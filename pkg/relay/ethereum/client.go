@@ -56,7 +56,6 @@ func (chain *Chain) TxOpts(ctx context.Context) (*bind.TransactOpts, error) {
 	return txOpts, nil
 }
 
-// https://github.com/NomicFoundation/hardhat/blob/197118fb9f92034d250e7e7d12f69e28f960d3b1/packages/hardhat-core/src/internal/core/providers/gas-providers.ts#L248
 func (chain *Chain) feeHistory(ctx context.Context) (*big.Int, *big.Int, error) {
 	const eip1559RewardPercentile = 25
 	const eip1559BaseFeeMaxFullBlocksPreference = 3
@@ -75,9 +74,16 @@ func (chain *Chain) feeHistory(ctx context.Context) (*big.Int, *big.Int, error) 
 		return nil, nil, fmt.Errorf("insufficient base fee")
 	}
 	gasTipCap := history.Reward[0][0]
+	if gasTipCap.Cmp(big.NewInt(0)) == 0 {
+		return nil, nil, fmt.Errorf("suggested gasTipCap is zero")
+	}
+	baseFeePerGas := history.BaseFee[1]
+	if baseFeePerGas.Cmp(big.NewInt(0)) == 0 {
+		return nil, nil, fmt.Errorf("suggested baseFeePerGas is zero")
+	}
+	// https://github.com/NomicFoundation/hardhat/blob/197118fb9f92034d250e7e7d12f69e28f960d3b1/packages/hardhat-core/src/internal/core/providers/gas-providers.ts#L248
 	numerator := new(big.Int).Exp(big.NewInt(9), big.NewInt(eip1559BaseFeeMaxFullBlocksPreference-1), nil)
 	denominator := new(big.Int).Exp(big.NewInt(8), big.NewInt(eip1559BaseFeeMaxFullBlocksPreference-1), nil)
-	base := new(big.Int).Mul(history.BaseFee[1], numerator)
-	gasFeeCap := new(big.Int).Div(base, denominator)
+	gasFeeCap := new(big.Int).Div(new(big.Int).Mul(baseFeePerGas, numerator), denominator)
 	return gasTipCap, gasFeeCap, nil
 }
