@@ -47,26 +47,27 @@ func (c ChainConfig) Validate() error {
 	} else if err := c.Signer.GetCachedValue().(SignerConfig).Validate(); err != nil {
 		errs = append(errs, fmt.Errorf("config attribute \"signer\" is invalid: %v", err))
 	}
-	if !c.EnableDebugTrace {
+	if !c.EnableLegacyTx {
 		gasConfig := c.DynamicTxGasConfig
 		if gasConfig == nil {
 			errs = append(errs, fmt.Errorf("config attribute \"dynamic_tx_gas_config\" is empty"))
-		}
-		if gasConfig.LimitPriorityFeePerGas != "" {
-			if _, err := utils.ParseEtherAmount(gasConfig.LimitPriorityFeePerGas); err != nil {
-				errs = append(errs, fmt.Errorf("config attribute \"limit_priority_fee_per_gas\" is invalid: %v", err))
+		} else {
+			if gasConfig.LimitPriorityFeePerGas != "" {
+				if _, err := utils.ParseEtherAmount(gasConfig.LimitPriorityFeePerGas); err != nil {
+					errs = append(errs, fmt.Errorf("config attribute \"limit_priority_fee_per_gas\" is invalid: %v", err))
+				}
 			}
-		}
-		if err := gasConfig.PriorityFeeRate.Validate(); err != nil {
-			errs = append(errs, fmt.Errorf("config attribute \"priority_fee_rate\" is invalid: %v", err))
-		}
-		if gasConfig.LimitFeePerGas != "" {
-			if _, err := utils.ParseEtherAmount(gasConfig.LimitFeePerGas); err != nil {
-				errs = append(errs, fmt.Errorf("config attribute \"limit_fee_per_gas\" is invalid: %v", err))
+			if err := gasConfig.PriorityFeeRate.Validate(); err != nil {
+				errs = append(errs, fmt.Errorf("config attribute \"priority_fee_rate\" is invalid: %v", err))
 			}
-		}
-		if err := gasConfig.BaseFeeRate.Validate(); err != nil {
-			errs = append(errs, fmt.Errorf("config attribute \"base_fee_rate\" is invalid: %v", err))
+			if gasConfig.LimitFeePerGas != "" {
+				if _, err := utils.ParseEtherAmount(gasConfig.LimitFeePerGas); err != nil {
+					errs = append(errs, fmt.Errorf("config attribute \"limit_fee_per_gas\" is invalid: %v", err))
+				}
+			}
+			if err := gasConfig.BaseFeeRate.Validate(); err != nil {
+				errs = append(errs, fmt.Errorf("config attribute \"base_fee_rate\" is invalid: %v", err))
+			}
 		}
 	}
 	return errors.Join(errs...)

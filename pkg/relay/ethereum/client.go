@@ -75,9 +75,9 @@ func (chain *Chain) feeHistory(ctx context.Context) (*big.Int, *big.Int, error) 
 		return nil, nil, fmt.Errorf("insufficient base fee")
 	}
 	gasTipCap := history.Reward[0][0]
-	nominator := new(big.Int).Exp(big.NewInt(9), big.NewInt(eip1559BaseFeeMaxFullBlocksPreference-1), nil)
+	numerator := new(big.Int).Exp(big.NewInt(9), big.NewInt(eip1559BaseFeeMaxFullBlocksPreference-1), nil)
 	denominator := new(big.Int).Exp(big.NewInt(8), big.NewInt(eip1559BaseFeeMaxFullBlocksPreference-1), nil)
-	base := new(big.Int).Mul(history.BaseFee[1], nominator)
+	base := new(big.Int).Mul(history.BaseFee[1], numerator)
 	gasFeeCap := new(big.Int).Div(base, denominator)
 	return gasTipCap, gasFeeCap, nil
 }
