@@ -10,24 +10,14 @@ import (
 )
 
 func Test_TxOpts_LegacyTx(t *testing.T) {
-	signer, err := types.NewAnyWithValue(&hd.SignerConfig{
-		Mnemonic: "math razor capable expose worth grape metal sunset metal sudden usage scheme",
-		Path:     "m/44'/60'/0'/0/0",
-	})
+	config := createConfig()
+	config.RpcAddr = "https://bsc-dataseed1.binance.org/"
+	config.EnableLegacyTx = true
+	chain, err := ethereum.NewChain(*config)
 	if err != nil {
 		t.Fatal(err)
 	}
-	config := ethereum.ChainConfig{
-		RpcAddr:        "https://bsc-dataseed1.binance.org/",
-		Signer:         signer,
-		EnableLegacyTx: true,
-	}
-	ctx := context.Background()
-	chain, err := ethereum.NewChain(config)
-	if err != nil {
-		t.Fatal(err)
-	}
-	txOpts, err := chain.TxOpts(ctx)
+	txOpts, err := chain.TxOpts(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -42,62 +32,14 @@ func Test_TxOpts_LegacyTx(t *testing.T) {
 	}
 }
 
-func Test_TxOpts_DynamicTx_BSC_Error(t *testing.T) {
-	signer, err := types.NewAnyWithValue(&hd.SignerConfig{
-		Mnemonic: "math razor capable expose worth grape metal sunset metal sudden usage scheme",
-		Path:     "m/44'/60'/0'/0/0",
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	config := ethereum.ChainConfig{
-		RpcAddr:            "https://bsc-dataseed1.binance.org/",
-		Signer:             signer,
-		EnableLegacyTx:     false,
-		DynamicTxGasConfig: &ethereum.DynamicTxGasConfig{},
-	}
-	ctx := context.Background()
-	chain, err := ethereum.NewChain(config)
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = chain.TxOpts(ctx)
-	if err == nil || err.Error() != "suggested baseFeePerGas is zero" {
-		t.Fatal("unexpected result")
-	}
-}
-
 func Test_TxOpts_DynamicTx(t *testing.T) {
-	signer, err := types.NewAnyWithValue(&hd.SignerConfig{
-		Mnemonic: "math razor capable expose worth grape metal sunset metal sudden usage scheme",
-		Path:     "m/44'/60'/0'/0/0",
-	})
+	config := createConfig()
+	config.RpcAddr = "https://ethereum.publicnode.com"
+	chain, err := ethereum.NewChain(*config)
 	if err != nil {
 		t.Fatal(err)
 	}
-	config := ethereum.ChainConfig{
-		RpcAddr:        "https://ethereum.publicnode.com",
-		Signer:         signer,
-		EnableLegacyTx: false,
-		DynamicTxGasConfig: &ethereum.DynamicTxGasConfig{
-			LimitPriorityFeePerGas: "1ether",
-			PriorityFeeRate: &ethereum.Fraction{
-				Numerator:   1,
-				Denominator: 1,
-			},
-			LimitFeePerGas: "1ether",
-			BaseFeeRate: &ethereum.Fraction{
-				Numerator:   1,
-				Denominator: 1,
-			},
-		},
-	}
-	ctx := context.Background()
-	chain, err := ethereum.NewChain(config)
-	if err != nil {
-		t.Fatal(err)
-	}
-	txOpts, err := chain.TxOpts(ctx)
+	txOpts, err := chain.TxOpts(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -111,4 +53,32 @@ func Test_TxOpts_DynamicTx(t *testing.T) {
 		t.Error("gasPrice must be nil")
 	}
 
+}
+func createConfig() *ethereum.ChainConfig {
+	signer, err := types.NewAnyWithValue(&hd.SignerConfig{
+		Mnemonic: "math razor capable expose worth grape metal sunset metal sudden usage scheme",
+		Path:     "m/44'/60'/0'/0/0",
+	})
+	if err != nil {
+		panic(err)
+	}
+	return &ethereum.ChainConfig{
+		Signer:         signer,
+		EnableLegacyTx: false,
+		DynamicTxGasConfig: &ethereum.DynamicTxGasConfig{
+			LimitPriorityFeePerGas: "1ether",
+			PriorityFeeRate: &ethereum.Fraction{
+				Numerator:   1,
+				Denominator: 1,
+			},
+			LimitFeePerGas: "1ether",
+			// https://github.com/ethereum/go-ethereum/blob/0b471c312a82adf172bf6efdc7e3fdf285c62fba/accounts/abi/bind/base.go#L35
+			BaseFeeRate: &ethereum.Fraction{
+				Numerator:   2,
+				Denominator: 1,
+			},
+			//https://github.com/NomicFoundation/hardhat/blob/197118fb9f92034d250e7e7d12f69e28f960d3b1/packages/hardhat-core/src/internal/core/providers/gas-providers.ts#L248
+			FeeHistoryRewardPercentile: 50,
+		},
+	}
 }

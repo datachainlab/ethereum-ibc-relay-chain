@@ -39,5 +39,6 @@ message DynamicTxGasConfig {
   Fraction priority_fee_rate = 2;
   string limit_fee_per_gas = 3;
   Fraction base_fee_rate = 4;
+  uint32 fee_history_reward_percentile = 5;
 }
 
