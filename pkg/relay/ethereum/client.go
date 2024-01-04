@@ -32,18 +32,17 @@ func (chain *Chain) TxOpts(ctx context.Context) (*bind.TransactOpts, error) {
 		txOpts.GasPrice = gasPrice
 		return txOpts, nil
 	}
-
-	gasTipCap, gasFeeCap, err := chain.feeHistory(ctx, float64(chain.Config().RewardPercentile))
+	gasTipCap, gasFeeCap, err := chain.feeHistory(ctx)
 	if err != nil {
 		return nil, err
 	}
 	// GasTipCap = min(LimitPriorityFeePerGas, Suggested * PriorityFeeRate)
-	chain.config.PriorityFeeRate.Mul(gasTipCap)
+	chain.config.DynamicTxGasConfig.PriorityFeeRate.Mul(gasTipCap)
 	if l := chain.config.GetLimitPriorityFeePerGas(); l.Sign() > 0 && gasTipCap.Cmp(l) > 0 {
 		gasTipCap = l
 	}
 	// GasFeeCap = min(LimitFeePerGas, GasTipCap + BaseFee * BaseFeeRate)
-	chain.config.BaseFeeRate.Mul(gasFeeCap)
+	chain.config.DynamicTxGasConfig.BaseFeeRate.Mul(gasFeeCap)
 	gasFeeCap.Add(gasFeeCap, gasTipCap)
 	if l := chain.config.GetLimitFeePerGas(); l.Sign() > 0 && gasFeeCap.Cmp(l) > 0 {
 		gasFeeCap = l
@@ -57,8 +56,12 @@ func (chain *Chain) TxOpts(ctx context.Context) (*bind.TransactOpts, error) {
 	return txOpts, nil
 }
 
-func (chain *Chain) feeHistory(ctx context.Context, rewardPercentile float64) (*big.Int, *big.Int, error) {
-	history, err := chain.Client().FeeHistory(ctx, 1, nil, []float64{rewardPercentile})
+// https://github.com/NomicFoundation/hardhat/blob/197118fb9f92034d250e7e7d12f69e28f960d3b1/packages/hardhat-core/src/internal/core/providers/gas-providers.ts#L248
+func (chain *Chain) feeHistory(ctx context.Context) (*big.Int, *big.Int, error) {
+	const eip1559RewardPercentile = 25
+	const eip1559BaseFeeMaxFullBlocksPreference = 3
+
+	history, err := chain.Client().FeeHistory(ctx, 1, nil, []float64{eip1559RewardPercentile})
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get feeHistory: %v", err)
 	}
@@ -72,6 +75,9 @@ func (chain *Chain) feeHistory(ctx context.Context, rewardPercentile float64) (*
 		return nil, nil, fmt.Errorf("insufficient base fee")
 	}
 	gasTipCap := history.Reward[0][0]
-	gasFeeCap := history.BaseFee[1]
+	nominator := new(big.Int).Exp(big.NewInt(9), big.NewInt(eip1559BaseFeeMaxFullBlocksPreference-1), nil)
+	denominator := new(big.Int).Exp(big.NewInt(8), big.NewInt(eip1559BaseFeeMaxFullBlocksPreference-1), nil)
+	base := new(big.Int).Mul(history.BaseFee[1], nominator)
+	gasFeeCap := new(big.Int).Div(base, denominator)
 	return gasTipCap, gasFeeCap, nil
 }

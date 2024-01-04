@@ -25,14 +25,19 @@ message ChainConfig {
   uint64 max_retry_for_inclusion = 10;
 
   bool enable_legacy_tx = 11;
-  string limit_priority_fee_per_gas = 12;
-  Fraction priority_fee_rate = 13;
-  string limit_fee_per_gas = 14;
-  Fraction base_fee_rate = 15;
-  float reward_percentile = 16;
+  DynamicTxGasConfig dynamic_tx_gas_config = 12;
+
 }
 
 message Fraction {
   uint64 numerator = 1;
   uint64 denominator = 2;
 }
+
+message DynamicTxGasConfig {
+  string limit_priority_fee_per_gas = 1;
+  Fraction priority_fee_rate = 2;
+  string limit_fee_per_gas = 3;
+  Fraction base_fee_rate = 4;
+}
+
