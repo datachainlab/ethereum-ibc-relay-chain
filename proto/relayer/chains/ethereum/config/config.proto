@@ -24,8 +24,9 @@ message ChainConfig {
   uint64 average_block_time_msec = 9;
   uint64 max_retry_for_inclusion = 10;
 
-  bool enable_legacy_tx = 11;
-  DynamicTxGasConfig dynamic_tx_gas_config = 12;
+  string tx_type = 11;
+  uint64 gas_limit = 12;
+  DynamicTxGasConfig dynamic_tx_gas_config = 13;
 
 }
 

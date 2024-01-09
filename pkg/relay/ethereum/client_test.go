@@ -12,7 +12,7 @@ import (
 func Test_TxOpts_LegacyTx(t *testing.T) {
 	config := createConfig()
 	config.RpcAddr = "https://bsc-dataseed1.binance.org/"
-	config.EnableLegacyTx = true
+	config.TxType = "legacy"
 	chain, err := ethereum.NewChain(*config)
 	if err != nil {
 		t.Fatal(err)
@@ -52,8 +52,35 @@ func Test_TxOpts_DynamicTx(t *testing.T) {
 	if txOpts.GasPrice != nil {
 		t.Error("gasPrice must be nil")
 	}
-
 }
+
+func Test_TxOpts_AutoTx(t *testing.T) {
+	config := createConfig()
+	config.RpcAddr = "https://ethereum.publicnode.com"
+	config.TxType = "auto"
+	config.GasLimit = 6382056
+	chain, err := ethereum.NewChain(*config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	txOpts, err := chain.TxOpts(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if txOpts.GasTipCap != nil {
+		t.Error("gasTipCap must be nil")
+	}
+	if txOpts.GasFeeCap != nil {
+		t.Error("gasFeeCap must be nil")
+	}
+	if txOpts.GasPrice != nil {
+		t.Error("gasPrice must be nil")
+	}
+	if txOpts.GasLimit != config.GasLimit {
+		t.Error("invalid gasLimit")
+	}
+}
+
 func createConfig() *ethereum.ChainConfig {
 	signer, err := types.NewAnyWithValue(&hd.SignerConfig{
 		Mnemonic: "math razor capable expose worth grape metal sunset metal sudden usage scheme",
@@ -63,8 +90,8 @@ func createConfig() *ethereum.ChainConfig {
 		panic(err)
 	}
 	return &ethereum.ChainConfig{
-		Signer:         signer,
-		EnableLegacyTx: false,
+		Signer: signer,
+		TxType: "dynamic",
 		DynamicTxGasConfig: &ethereum.DynamicTxGasConfig{
 			LimitPriorityFeePerGas: "1ether",
 			PriorityFeeRate: &ethereum.Fraction{

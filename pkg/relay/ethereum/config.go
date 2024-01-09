@@ -17,6 +17,10 @@ var (
 	_ codectypes.UnpackInterfacesMessage = (*ChainConfig)(nil)
 )
 
+const TxTypeAuto = "auto"
+const TxTypeLegacy = "legacy"
+const TxTypeDynamic = "dynamic"
+
 func (c ChainConfig) Build() (core.Chain, error) {
 	return NewChain(c)
 }
@@ -47,7 +51,7 @@ func (c ChainConfig) Validate() error {
 	} else if err := c.Signer.GetCachedValue().(SignerConfig).Validate(); err != nil {
 		errs = append(errs, fmt.Errorf("config attribute \"signer\" is invalid: %v", err))
 	}
-	if !c.EnableLegacyTx {
+	if c.TxType == TxTypeDynamic {
 		gasConfig := c.DynamicTxGasConfig
 		if gasConfig == nil {
 			errs = append(errs, fmt.Errorf("config attribute \"dynamic_tx_gas_config\" is empty"))
