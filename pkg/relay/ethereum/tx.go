@@ -154,15 +154,16 @@ func (c *Chain) TxConnectionOpenTry(opts *bind.TransactOpts, msg *conntypes.MsgC
 			ConnectionId: msg.Counterparty.ConnectionId,
 			Prefix:       ibchandler.MerklePrefixData(msg.Counterparty.Prefix),
 		},
-		DelayPeriod:          msg.DelayPeriod,
-		ClientId:             msg.ClientId,
-		ClientStateBytes:     clientStateBytes,
-		CounterpartyVersions: versions,
-		ProofInit:            msg.ProofInit,
-		ProofClient:          msg.ProofClient,
-		ProofConsensus:       msg.ProofConsensus,
-		ProofHeight:          pbToHandlerHeight(msg.ProofHeight),
-		ConsensusHeight:      pbToHandlerHeight(msg.ConsensusHeight),
+		DelayPeriod:             msg.DelayPeriod,
+		ClientId:                msg.ClientId,
+		ClientStateBytes:        clientStateBytes,
+		CounterpartyVersions:    versions,
+		ProofInit:               msg.ProofInit,
+		ProofClient:             msg.ProofClient,
+		ProofConsensus:          msg.ProofConsensus,
+		ProofHeight:             pbToHandlerHeight(msg.ProofHeight),
+		ConsensusHeight:         pbToHandlerHeight(msg.ConsensusHeight),
+		HostConsensusStateProof: msg.HostConsensusStateProof,
 	})
 }
 
@@ -184,6 +185,7 @@ func (c *Chain) TxConnectionOpenAck(opts *bind.TransactOpts, msg *conntypes.MsgC
 		ProofConsensus:           msg.ProofConsensus,
 		ProofHeight:              pbToHandlerHeight(msg.ProofHeight),
 		ConsensusHeight:          pbToHandlerHeight(msg.ConsensusHeight),
+		HostConsensusStateProof:  msg.HostConsensusStateProof,
 	})
 }
 
