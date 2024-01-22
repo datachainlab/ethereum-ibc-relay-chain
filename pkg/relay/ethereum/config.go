@@ -1,6 +1,7 @@
 package ethereum
 
 import (
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"strings"
@@ -45,7 +46,11 @@ func (c ChainConfig) Validate() error {
 	} else if err := c.Signer.GetCachedValue().(SignerConfig).Validate(); err != nil {
 		errs = append(errs, fmt.Errorf("config attribute \"signer\" is invalid: %v", err))
 	}
-
+	if c.AllowLcFunctions != nil {
+		if err := c.AllowLcFunctions.ValidateBasic(); err != nil {
+			errs = append(errs, fmt.Errorf("config attribute \"allow_lc_functions\" is invalid: %v", err))
+		}
+	}
 	return errors.Join(errs...)
 }
 
@@ -58,4 +63,62 @@ func (c ChainConfig) UnpackInterfaces(unpacker codectypes.AnyUnpacker) error {
 
 func (c ChainConfig) IBCAddress() common.Address {
 	return common.HexToAddress(c.IbcAddress)
+}
+
+func (alf AllowLCFunctionsConfig) ValidateBasic() error {
+	if !common.IsHexAddress(alf.LcAddress) {
+		return fmt.Errorf("invalid contract address: %s", alf.LcAddress)
+	} else if alf.AllowAll && len(alf.Selectors) > 0 {
+		return fmt.Errorf("allowAll is true and selectors is not empty")
+	} else if !alf.AllowAll && len(alf.Selectors) == 0 {
+		return fmt.Errorf("allowAll is false and selectors is empty")
+	}
+	return nil
+}
+
+// CONTRACT: alf.ValidateBasic() must be called before calling this method.
+func (alf AllowLCFunctionsConfig) ToAllowLCFunctions() (*AllowLCFunctions, error) {
+	if alf.AllowAll {
+		return &AllowLCFunctions{
+			LCAddress: common.HexToAddress(alf.LcAddress),
+			AllowALL:  true,
+		}, nil
+	}
+	selectors := make([][4]byte, len(alf.Selectors))
+	for i, s := range alf.Selectors {
+		bz, err := hex.DecodeString(strings.TrimPrefix(s, "0x"))
+		if err != nil {
+			return nil, fmt.Errorf("failed to decode selector: selector=%v err=%v", s, err)
+		}
+		if len(bz) != 4 {
+			return nil, fmt.Errorf("invalid selector: %s", s)
+		}
+		copy(selectors[i][:], bz)
+	}
+	return &AllowLCFunctions{
+		LCAddress: common.HexToAddress(alf.LcAddress),
+		AllowALL:  false,
+		Selectors: selectors,
+	}, nil
+}
+
+type AllowLCFunctions struct {
+	LCAddress common.Address
+	AllowALL  bool
+	Selectors [][4]byte
+}
+
+func (lcf AllowLCFunctions) IsAllowed(address common.Address, selector [4]byte) bool {
+	if lcf.LCAddress != address {
+		return false
+	}
+	if lcf.AllowALL {
+		return true
+	}
+	for _, s := range lcf.Selectors {
+		if s == selector {
+			return true
+		}
+	}
+	return false
 }

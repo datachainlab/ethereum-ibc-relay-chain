@@ -11,6 +11,7 @@ import (
 	conntypes "github.com/cosmos/ibc-go/v7/modules/core/03-connection/types"
 	chantypes "github.com/cosmos/ibc-go/v7/modules/core/04-channel/types"
 	"github.com/cosmos/ibc-go/v7/modules/core/exported"
+	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	gethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/hyperledger-labs/yui-relayer/core"
@@ -20,6 +21,12 @@ import (
 
 // SendMsgs sends msgs to the chain
 func (c *Chain) SendMsgs(msgs []sdk.Msg) ([]core.MsgID, error) {
+	ctx := context.TODO()
+	// if src's connection is OPEN, dst's connection is OPEN or TRYOPEN, so we can skip to update client commitments
+	skipUpdateClientCommitment, err := c.confirmConnectionOpened(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to confirm connection opened: %w", err)
+	}
 	logger := c.GetChainLogger()
 	var msgIDs []core.MsgID
 	for i, msg := range msgs {
@@ -27,13 +34,12 @@ func (c *Chain) SendMsgs(msgs []sdk.Msg) ([]core.MsgID, error) {
 			tx  *gethtypes.Transaction
 			err error
 		)
-		ctx := context.Background()
 		opts := c.TxOpts(ctx)
 		switch msg := msg.(type) {
 		case *clienttypes.MsgCreateClient:
 			tx, err = c.TxCreateClient(opts, msg)
 		case *clienttypes.MsgUpdateClient:
-			tx, err = c.TxUpdateClient(opts, msg)
+			tx, err = c.TxUpdateClient(opts, msg, skipUpdateClientCommitment)
 		case *conntypes.MsgConnectionOpenInit:
 			tx, err = c.TxConnectionOpenInit(opts, msg)
 		case *conntypes.MsgConnectionOpenTry:
@@ -111,20 +117,33 @@ func (c *Chain) TxCreateClient(opts *bind.TransactOpts, msg *clienttypes.MsgCrea
 	}
 	return c.ibcHandler.CreateClient(opts, ibchandler.IIBCClientMsgCreateClient{
 		ClientType:          clientState.ClientType(),
-		ClientStateBytes:    clientStateBytes,
-		ConsensusStateBytes: consensusStateBytes,
+		ProtoClientState:    clientStateBytes,
+		ProtoConsensusState: consensusStateBytes,
 	})
 }
 
-func (c *Chain) TxUpdateClient(opts *bind.TransactOpts, msg *clienttypes.MsgUpdateClient) (*gethtypes.Transaction, error) {
-	headerBytes, err := proto.Marshal(msg.ClientMessage)
+func (c *Chain) TxUpdateClient(opts *bind.TransactOpts, msg *clienttypes.MsgUpdateClient, skipUpdateClientCommitment bool) (*gethtypes.Transaction, error) {
+	clientMessageBytes, err := proto.Marshal(msg.ClientMessage)
 	if err != nil {
 		return nil, err
 	}
-	return c.ibcHandler.UpdateClient(opts, ibchandler.IIBCClientMsgUpdateClient{
-		ClientId:      msg.ClientId,
-		ClientMessage: headerBytes,
-	})
+	m := ibchandler.IIBCClientMsgUpdateClient{
+		ClientId:           msg.ClientId,
+		ProtoClientMessage: clientMessageBytes,
+	}
+	if c.allowLCFunctions != nil && skipUpdateClientCommitment {
+		lcAddr, fnSel, args, err := c.ibcHandler.RouteUpdateClient(c.CallOpts(context.TODO(), 0), m)
+		if err != nil {
+			return nil, fmt.Errorf("failed to route update client: %w", err)
+		}
+		if !c.allowLCFunctions.IsAllowed(lcAddr, fnSel) {
+			return nil, fmt.Errorf("contract %s, function %x is not allowed", lcAddr.Hex(), fnSel)
+		}
+		calldata := append(fnSel[:], args...)
+		return bind.NewBoundContract(lcAddr, abi.ABI{}, c.client, c.client, c.client).RawTransact(opts, calldata)
+	} else {
+		return c.ibcHandler.UpdateClient(opts, m)
+	}
 }
 
 func (c *Chain) TxConnectionOpenInit(opts *bind.TransactOpts, msg *conntypes.MsgConnectionOpenInit) (*gethtypes.Transaction, error) {
