@@ -35,6 +35,7 @@ type ChainConfig struct {
 	EnableDebugTrace      bool       `protobuf:"varint,8,opt,name=enable_debug_trace,json=enableDebugTrace,proto3" json:"enable_debug_trace,omitempty"`
 	AverageBlockTimeMsec  uint64     `protobuf:"varint,9,opt,name=average_block_time_msec,json=averageBlockTimeMsec,proto3" json:"average_block_time_msec,omitempty"`
 	MaxRetryForInclusion  uint64     `protobuf:"varint,10,opt,name=max_retry_for_inclusion,json=maxRetryForInclusion,proto3" json:"max_retry_for_inclusion,omitempty"`
+	// option for ibc-solidity ADR-001
 	// if set, the relayer updates a LC contract directly if possible
 	// if null, the relayer updates a LC contract via the handler
 	AllowLcFunctions *AllowLCFunctionsConfig `protobuf:"bytes,11,opt,name=allow_lc_functions,json=allowLcFunctions,proto3" json:"allow_lc_functions,omitempty"`

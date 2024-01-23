@@ -455,6 +455,9 @@ func (c *Chain) confirmConnectionOpened(ctx context.Context) (bool, error) {
 	if c.connectionOpenedConfirmed {
 		return true, nil
 	}
+	if c.pathEnd.ConnectionID == "" {
+		return false, nil
+	}
 	latestHeight, err := c.LatestHeight()
 	if err != nil {
 		return false, err
