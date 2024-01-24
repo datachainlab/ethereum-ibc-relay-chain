@@ -51,6 +51,9 @@ func (c ChainConfig) Validate() error {
 	} else if err := c.Signer.GetCachedValue().(SignerConfig).Validate(); err != nil {
 		errs = append(errs, fmt.Errorf("config attribute \"signer\" is invalid: %v", err))
 	}
+	if c.TxType != TxTypeAuto && c.TxType != TxTypeLegacy && c.TxType != TxTypeDynamic {
+		errs = append(errs, fmt.Errorf("config attribute \"tx_type\" is invalid"))
+	}
 	if c.TxType == TxTypeDynamic {
 		gasConfig := c.DynamicTxGasConfig
 		if gasConfig == nil {
