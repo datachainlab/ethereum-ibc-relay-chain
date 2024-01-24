@@ -44,6 +44,12 @@ func init() {
 func (chain *Chain) findSentPackets(ctx core.QueryContext, fromHeight uint64) (core.PacketInfoList, error) {
 	logger := chain.GetChannelLogger()
 	now := time.Now()
+
+	var packets core.PacketInfoList
+	if fromHeight > ctx.Height().GetRevisionHeight() {
+		return packets, nil
+	}
+
 	var dstPortID, dstChannelID string
 	if channel, found, err := chain.ibcHandler.GetChannel(
 		chain.callOptsFromQueryContext(ctx),
@@ -80,7 +86,6 @@ func (chain *Chain) findSentPackets(ctx core.QueryContext, fromHeight uint64) (c
 
 	defer logger.TimeTrack(now, "findSentPackets", "num_logs", len(logs))
 
-	var packets core.PacketInfoList
 	for _, log := range logs {
 		height := clienttypes.NewHeight(0, log.BlockNumber)
 
@@ -111,6 +116,12 @@ func (chain *Chain) findSentPackets(ctx core.QueryContext, fromHeight uint64) (c
 func (chain *Chain) findReceivedPackets(ctx core.QueryContext, fromHeight uint64) (core.PacketInfoList, error) {
 	logger := chain.GetChannelLogger()
 	now := time.Now()
+
+	var packets core.PacketInfoList
+	if fromHeight > ctx.Height().GetRevisionHeight() {
+		return packets, nil
+	}
+
 	recvPacketEvents, err := chain.findRecvPacketEvents(ctx, fromHeight)
 	if err != nil {
 		logger.Error("failed to find recv packet events", err)
@@ -129,7 +140,6 @@ func (chain *Chain) findReceivedPackets(ctx core.QueryContext, fromHeight uint64
 
 	defer logger.TimeTrack(now, "findReceivedPackets", "num_recv_packet_events", len(recvPacketEvents), "num_write_ack_events", len(writeAckEvents))
 
-	var packets core.PacketInfoList
 	for _, rp := range recvPacketEvents {
 		for _, wa := range writeAckEvents {
 			if rp.Packet.Sequence == wa.Sequence {
