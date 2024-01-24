@@ -15,6 +15,7 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	gethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/hyperledger-labs/yui-relayer/core"
+	"github.com/hyperledger-labs/yui-relayer/log"
 
 	"github.com/datachainlab/ethereum-ibc-relay-chain/pkg/contract/ibchandler"
 )
@@ -131,19 +132,24 @@ func (c *Chain) TxUpdateClient(opts *bind.TransactOpts, msg *clienttypes.MsgUpda
 		ClientId:           msg.ClientId,
 		ProtoClientMessage: clientMessageBytes,
 	}
-	if c.allowLCFunctions != nil && skipUpdateClientCommitment {
-		lcAddr, fnSel, args, err := c.ibcHandler.RouteUpdateClient(c.CallOpts(context.TODO(), 0), m)
+	// if `skipUpdateClientCommitment` is true and `allowLCFunctions` is not nil,
+	// the relayer calls `routeUpdateClient` to constructs an UpdateClient tx to the LC contract.
+	// ref. https://github.com/hyperledger-labs/yui-ibc-solidity/blob/main/docs/adr/adr-001.md
+	if skipUpdateClientCommitment && c.allowLCFunctions != nil {
+		lcAddr, fnSel, args, err := c.ibcHandler.RouteUpdateClient(c.CallOpts(opts.Context, 0), m)
 		if err != nil {
 			return nil, fmt.Errorf("failed to route update client: %w", err)
 		}
-		if !c.allowLCFunctions.IsAllowed(lcAddr, fnSel) {
-			return nil, fmt.Errorf("contract %s, function %x is not allowed", lcAddr.Hex(), fnSel)
+		// ensure that the contract and function are allowed
+		if c.allowLCFunctions.IsAllowed(lcAddr, fnSel) {
+			log.GetLogger().Info("contract function is allowed", "contract", lcAddr.Hex(), "selector", fmt.Sprintf("0x%x", fnSel))
+			calldata := append(fnSel[:], args...)
+			return bind.NewBoundContract(lcAddr, abi.ABI{}, c.client, c.client, c.client).RawTransact(opts, calldata)
 		}
-		calldata := append(fnSel[:], args...)
-		return bind.NewBoundContract(lcAddr, abi.ABI{}, c.client, c.client, c.client).RawTransact(opts, calldata)
-	} else {
-		return c.ibcHandler.UpdateClient(opts, m)
+		// fallback to send an UpdateClient to the IBC handler contract
+		log.GetLogger().Warn("contract function is not allowed", "contract", lcAddr.Hex(), "selector", fmt.Sprintf("0x%x", fnSel))
 	}
+	return c.ibcHandler.UpdateClient(opts, m)
 }
 
 func (c *Chain) TxConnectionOpenInit(opts *bind.TransactOpts, msg *conntypes.MsgConnectionOpenInit) (*gethtypes.Transaction, error) {
