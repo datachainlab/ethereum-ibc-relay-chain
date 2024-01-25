@@ -194,3 +194,30 @@ func searchRevertReason(result *callFrame) (string, error) {
 	}
 	return "", fmt.Errorf("revert reason not found")
 }
+
+func (cl *ETHClient) EstimateGasFromTx(ctx context.Context, tx *gethtypes.Transaction) (uint64, error) {
+	from, err := gethtypes.Sender(gethtypes.NewEIP155Signer(tx.ChainId()), tx)
+	if err != nil {
+		return 0, err
+	}
+	to := tx.To()
+	value := tx.Value()
+	gasTipCap := tx.GasTipCap()
+	gasFeeCap := tx.GasFeeCap()
+	gasPrice := tx.GasPrice()
+	data := tx.Data()
+	callMsg := ethereum.CallMsg{
+		From:      from,
+		To:        to,
+		GasPrice:  gasPrice,
+		GasTipCap: gasTipCap,
+		GasFeeCap: gasFeeCap,
+		Value:     value,
+		Data:      data,
+	}
+	estimatedGas, err := cl.EstimateGas(ctx, callMsg)
+	if err != nil {
+		return 0, err
+	}
+	return estimatedGas, nil
+}
