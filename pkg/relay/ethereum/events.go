@@ -46,7 +46,9 @@ func (chain *Chain) findSentPackets(ctx core.QueryContext, fromHeight uint64) (c
 	now := time.Now()
 
 	var packets core.PacketInfoList
-	if fromHeight > ctx.Height().GetRevisionHeight() {
+	toHeight := ctx.Height().GetRevisionHeight()
+	if fromHeight > toHeight {
+		logger.Info("fromHeight > toHeight", "fromHeight", fromHeight, "toHeight", toHeight)
 		return packets, nil
 	}
 
@@ -118,7 +120,9 @@ func (chain *Chain) findReceivedPackets(ctx core.QueryContext, fromHeight uint64
 	now := time.Now()
 
 	var packets core.PacketInfoList
-	if fromHeight > ctx.Height().GetRevisionHeight() {
+	toHeight := ctx.Height().GetRevisionHeight()
+	if fromHeight > toHeight {
+		logger.Info("fromHeight > toHeight", "fromHeight", fromHeight, "toHeight", toHeight)
 		return packets, nil
 	}
 
