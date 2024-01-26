@@ -324,6 +324,10 @@ func (c *Chain) QueryUnfinalizedRelayPackets(ctx core.QueryContext, counterparty
 		return nil, err
 	}
 
+	if checkpoint > ctx.Height().GetRevisionHeight() {
+		logger.Info("checkpoint is greater than target height", "checkpoint", checkpoint, "height", ctx.Height().GetRevisionHeight())
+		return core.PacketInfoList{}, nil
+	}
 	packets, err := c.findSentPackets(ctx, checkpoint)
 	if err != nil {
 		logger.Error("failed to find sent packets", err)
@@ -383,6 +387,10 @@ func (c *Chain) QueryUnfinalizedRelayAcknowledgements(ctx core.QueryContext, cou
 		return nil, err
 	}
 
+	if checkpoint > ctx.Height().GetRevisionHeight() {
+		logger.Info("checkpoint is greater than target height", "checkpoint", checkpoint, "height", ctx.Height().GetRevisionHeight())
+		return core.PacketInfoList{}, nil
+	}
 	packets, err := c.findReceivedPackets(ctx, checkpoint)
 	if err != nil {
 		logger.Error("failed to find received packets", err)
