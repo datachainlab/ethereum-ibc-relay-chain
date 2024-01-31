@@ -41,6 +41,15 @@ func (c ChainConfig) Validate() error {
 	if c.MaxRetryForInclusion == 0 {
 		errs = append(errs, fmt.Errorf("config attribute \"max_retry_for_inclusion\" is zero"))
 	}
+	if c.GasEstimateRate.Numerator == 0 {
+		errs = append(errs, fmt.Errorf("config attribute \"gas_estimate_rate.numerator\" is zero"))
+	}
+	if c.GasEstimateRate.Denominator == 0 {
+		errs = append(errs, fmt.Errorf("config attribute \"gas_estimate_rate.denominator\" is zero"))
+	}
+	if c.MaxGasLimit == 0 {
+		errs = append(errs, fmt.Errorf("config attribute \"max_gas_limit\" is zero"))
+	}
 	if c.Signer == nil {
 		errs = append(errs, fmt.Errorf("config attribute \"signer\" is empty"))
 	} else if err := c.Signer.GetCachedValue().(SignerConfig).Validate(); err != nil {

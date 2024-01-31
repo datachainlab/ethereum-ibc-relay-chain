@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	math "math"
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/gogoproto/proto"
@@ -36,39 +37,28 @@ func (c *Chain) SendMsgs(msgs []sdk.Msg) ([]core.MsgID, error) {
 			err error
 		)
 		opts := c.TxOpts(ctx)
-		switch msg := msg.(type) {
-		case *clienttypes.MsgCreateClient:
-			tx, err = c.TxCreateClient(opts, msg)
-		case *clienttypes.MsgUpdateClient:
-			tx, err = c.TxUpdateClient(opts, msg, skipUpdateClientCommitment)
-		case *conntypes.MsgConnectionOpenInit:
-			tx, err = c.TxConnectionOpenInit(opts, msg)
-		case *conntypes.MsgConnectionOpenTry:
-			tx, err = c.TxConnectionOpenTry(opts, msg)
-		case *conntypes.MsgConnectionOpenAck:
-			tx, err = c.TxConnectionOpenAck(opts, msg)
-		case *conntypes.MsgConnectionOpenConfirm:
-			tx, err = c.TxConnectionOpenConfirm(opts, msg)
-		case *chantypes.MsgChannelOpenInit:
-			tx, err = c.TxChannelOpenInit(opts, msg)
-		case *chantypes.MsgChannelOpenTry:
-			tx, err = c.TxChannelOpenTry(opts, msg)
-		case *chantypes.MsgChannelOpenAck:
-			tx, err = c.TxChannelOpenAck(opts, msg)
-		case *chantypes.MsgChannelOpenConfirm:
-			tx, err = c.TxChannelOpenConfirm(opts, msg)
-		case *chantypes.MsgRecvPacket:
-			tx, err = c.TxRecvPacket(opts, msg)
-		case *chantypes.MsgAcknowledgement:
-			tx, err = c.TxAcknowledgement(opts, msg)
-		// case *transfertypes.MsgTransfer:
-		// 	err = c.client.transfer(msg)
-		default:
-			logger.Error("failed to send msg", errors.New("illegal msg type"), "msg", msg)
-			panic("illegal msg type")
-		}
+		opts.GasLimit = math.MaxUint64
+		opts.NoSend = true
+		tx, err = c.SendTx(opts, msg, skipUpdateClientCommitment)
 		if err != nil {
-			logger.Error("failed to send msg", err, "msg", msg)
+			logger.Error("failed to send msg / NoSend: true", err, "msg", msg)
+			return nil, err
+		}
+		estimatedGas, err := c.client.EstimateGasFromTx(ctx, tx)
+		if err != nil {
+			logger.Error("failed to estimate gas", err, "msg", msg)
+			return nil, err
+		}
+		txGasLimit := estimatedGas * c.Config().GasEstimateRate.Numerator / c.Config().GasEstimateRate.Denominator
+		if txGasLimit > c.Config().MaxGasLimit {
+			logger.Warn("estimated gas exceeds max gas limit", "estimated_gas", txGasLimit, "max_gas_limit", c.Config().MaxGasLimit)
+			txGasLimit = c.Config().MaxGasLimit
+		}
+		opts.GasLimit = txGasLimit
+		opts.NoSend = false
+		tx, err = c.SendTx(opts, msg, skipUpdateClientCommitment)
+		if err != nil {
+			logger.Error("failed to send msg / NoSend: false", err, "msg", msg)
 			return nil, err
 		}
 		if receipt, revertReason, err := c.client.WaitForReceiptAndGet(ctx, tx.Hash(), c.config.EnableDebugTrace); err != nil {
@@ -304,4 +294,44 @@ func (c *Chain) TxAcknowledgement(opts *bind.TransactOpts, msg *chantypes.MsgAck
 		Proof:           msg.ProofAcked,
 		ProofHeight:     pbToHandlerHeight(msg.ProofHeight),
 	})
+}
+
+func (c *Chain) SendTx(opts *bind.TransactOpts, msg sdk.Msg, skipUpdateClientCommitment bool) (*gethtypes.Transaction, error) {
+	logger := c.GetChainLogger()
+	var (
+		tx  *gethtypes.Transaction
+		err error
+	)
+	switch msg := msg.(type) {
+	case *clienttypes.MsgCreateClient:
+		tx, err = c.TxCreateClient(opts, msg)
+	case *clienttypes.MsgUpdateClient:
+		tx, err = c.TxUpdateClient(opts, msg, skipUpdateClientCommitment)
+	case *conntypes.MsgConnectionOpenInit:
+		tx, err = c.TxConnectionOpenInit(opts, msg)
+	case *conntypes.MsgConnectionOpenTry:
+		tx, err = c.TxConnectionOpenTry(opts, msg)
+	case *conntypes.MsgConnectionOpenAck:
+		tx, err = c.TxConnectionOpenAck(opts, msg)
+	case *conntypes.MsgConnectionOpenConfirm:
+		tx, err = c.TxConnectionOpenConfirm(opts, msg)
+	case *chantypes.MsgChannelOpenInit:
+		tx, err = c.TxChannelOpenInit(opts, msg)
+	case *chantypes.MsgChannelOpenTry:
+		tx, err = c.TxChannelOpenTry(opts, msg)
+	case *chantypes.MsgChannelOpenAck:
+		tx, err = c.TxChannelOpenAck(opts, msg)
+	case *chantypes.MsgChannelOpenConfirm:
+		tx, err = c.TxChannelOpenConfirm(opts, msg)
+	case *chantypes.MsgRecvPacket:
+		tx, err = c.TxRecvPacket(opts, msg)
+	case *chantypes.MsgAcknowledgement:
+		tx, err = c.TxAcknowledgement(opts, msg)
+	// case *transfertypes.MsgTransfer:
+	// 	err = c.client.transfer(msg)
+	default:
+		logger.Error("failed to send msg", errors.New("illegal msg type"), "msg", msg)
+		panic("illegal msg type")
+	}
+	return tx, err
 }

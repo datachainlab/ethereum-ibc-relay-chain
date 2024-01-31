@@ -27,10 +27,18 @@ message ChainConfig {
   // if set, the relayer updates a LC contract directly if possible
   // if null, the relayer updates a LC contract via the handler
   AllowLCFunctionsConfig allow_lc_functions = 11;
+
+  Fraction gas_estimate_rate = 12;
+  uint64 max_gas_limit = 13;
 }
 
 message AllowLCFunctionsConfig {
   string lc_address = 1;
   bool allow_all = 2;
   repeated string selectors = 3;
+}
+
+message Fraction {
+  uint64 numerator   = 1;
+  uint64 denominator = 2;
 }
