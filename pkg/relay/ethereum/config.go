@@ -70,28 +70,11 @@ func (c ChainConfig) Validate() error {
 		errs = append(errs, fmt.Errorf("config attribute \"tx_type\" is invalid"))
 	}
 	if c.TxType == TxTypeDynamic {
-		gasConfig := c.DynamicTxGasConfig
-		if gasConfig == nil {
+		if c.DynamicTxGasConfig == nil {
 			errs = append(errs, fmt.Errorf("config attribute \"dynamic_tx_gas_config\" is empty"))
 		} else {
-			if gasConfig.LimitPriorityFeePerGas != "" {
-				if _, err := utils.ParseEtherAmount(gasConfig.LimitPriorityFeePerGas); err != nil {
-					errs = append(errs, fmt.Errorf("config attribute \"limit_priority_fee_per_gas\" is invalid: %v", err))
-				}
-			}
-			if err := gasConfig.PriorityFeeRate.Validate(); err != nil {
-				errs = append(errs, fmt.Errorf("config attribute \"priority_fee_rate\" is invalid: %v", err))
-			}
-			if gasConfig.LimitFeePerGas != "" {
-				if _, err := utils.ParseEtherAmount(gasConfig.LimitFeePerGas); err != nil {
-					errs = append(errs, fmt.Errorf("config attribute \"limit_fee_per_gas\" is invalid: %v", err))
-				}
-			}
-			if err := gasConfig.BaseFeeRate.Validate(); err != nil {
-				errs = append(errs, fmt.Errorf("config attribute \"base_fee_rate\" is invalid: %v", err))
-			}
-			if gasConfig.MaxRetryForFeeHistory == 0 {
-				errs = append(errs, fmt.Errorf("config attribute \"max_retry_for_fee_history\" is zero"))
+			if err := c.DynamicTxGasConfig.ValidateBasic(); err != nil {
+				errs = append(errs, fmt.Errorf("config attribute \"dynamic_tx_gas_config\" is invalid: %v", err))
 			}
 		}
 	}
@@ -109,26 +92,6 @@ func (f Fraction) Validate() error {
 func (f Fraction) Mul(n *big.Int) {
 	n.Mul(n, new(big.Int).SetUint64(f.Numerator))
 	n.Div(n, new(big.Int).SetUint64(f.Denominator))
-}
-
-func (c ChainConfig) GetLimitPriorityFeePerGas() *big.Int {
-	if c.DynamicTxGasConfig.LimitPriorityFeePerGas == "" {
-		return new(big.Int)
-	} else if limit, err := utils.ParseEtherAmount(c.DynamicTxGasConfig.LimitPriorityFeePerGas); err != nil {
-		panic(err)
-	} else {
-		return limit
-	}
-}
-
-func (c ChainConfig) GetLimitFeePerGas() *big.Int {
-	if c.DynamicTxGasConfig.LimitFeePerGas == "" {
-		return new(big.Int)
-	} else if limit, err := utils.ParseEtherAmount(c.DynamicTxGasConfig.LimitFeePerGas); err != nil {
-		panic(err)
-	} else {
-		return limit
-	}
 }
 
 func (c ChainConfig) UnpackInterfaces(unpacker codectypes.AnyUnpacker) error {
@@ -198,4 +161,47 @@ func (lcf AllowLCFunctions) IsAllowed(address common.Address, selector [4]byte) 
 		}
 	}
 	return false
+}
+
+func (gsc *DynamicTxGasConfig) ValidateBasic() error {
+	if gsc.LimitPriorityFeePerGas != "" {
+		if _, err := utils.ParseEtherAmount(gsc.LimitPriorityFeePerGas); err != nil {
+			return fmt.Errorf("config attribute \"limit_priority_fee_per_gas\" is invalid: %v", err)
+		}
+	}
+	if err := gsc.PriorityFeeRate.Validate(); err != nil {
+		return fmt.Errorf("config attribute \"priority_fee_rate\" is invalid: %v", err)
+	}
+	if gsc.LimitFeePerGas != "" {
+		if _, err := utils.ParseEtherAmount(gsc.LimitFeePerGas); err != nil {
+			return fmt.Errorf("config attribute \"limit_fee_per_gas\" is invalid: %v", err)
+		}
+	}
+	if err := gsc.BaseFeeRate.Validate(); err != nil {
+		return fmt.Errorf("config attribute \"base_fee_rate\" is invalid: %v", err)
+	}
+	if gsc.MaxRetryForFeeHistory == 0 {
+		return fmt.Errorf("config attribute \"max_retry_for_fee_history\" is zero")
+	}
+	return nil
+}
+
+func (c *DynamicTxGasConfig) GetLimitPriorityFeePerGas() *big.Int {
+	if c.LimitPriorityFeePerGas == "" {
+		return new(big.Int)
+	} else if limit, err := utils.ParseEtherAmount(c.LimitPriorityFeePerGas); err != nil {
+		panic(err)
+	} else {
+		return limit
+	}
+}
+
+func (c *DynamicTxGasConfig) GetLimitFeePerGas() *big.Int {
+	if c.LimitFeePerGas == "" {
+		return new(big.Int)
+	} else if limit, err := utils.ParseEtherAmount(c.LimitFeePerGas); err != nil {
+		panic(err)
+	} else {
+		return limit
+	}
 }
