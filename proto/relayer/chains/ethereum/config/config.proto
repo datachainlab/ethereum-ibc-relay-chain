@@ -24,14 +24,26 @@ message ChainConfig {
   uint64 average_block_time_msec = 9;
   uint64 max_retry_for_inclusion = 10;
 
-  string tx_type = 11;
-  uint64 gas_limit = 12;
-  DynamicTxGasConfig dynamic_tx_gas_config = 13;
+  // option for ibc-solidity ADR-001
+  // if set, the relayer updates a LC contract directly if possible
+  // if null, the relayer updates a LC contract via the handler
+  AllowLCFunctionsConfig allow_lc_functions = 11;
 
+  Fraction gas_estimate_rate = 12;
+  uint64 max_gas_limit = 13;
+
+  string tx_type = 14;
+  DynamicTxGasConfig dynamic_tx_gas_config = 15;
+}
+
+message AllowLCFunctionsConfig {
+  string lc_address = 1;
+  bool allow_all = 2;
+  repeated string selectors = 3;
 }
 
 message Fraction {
-  uint64 numerator = 1;
+  uint64 numerator   = 1;
   uint64 denominator = 2;
 }
 

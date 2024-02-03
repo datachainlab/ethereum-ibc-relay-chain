@@ -58,7 +58,6 @@ func Test_TxOpts_AutoTx(t *testing.T) {
 	config := createConfig()
 	config.RpcAddr = "https://ethereum.publicnode.com"
 	config.TxType = "auto"
-	config.GasLimit = 6382056
 	chain, err := ethereum.NewChain(*config)
 	if err != nil {
 		t.Fatal(err)
@@ -75,9 +74,6 @@ func Test_TxOpts_AutoTx(t *testing.T) {
 	}
 	if txOpts.GasPrice != nil {
 		t.Error("gasPrice must be nil")
-	}
-	if txOpts.GasLimit != config.GasLimit {
-		t.Error("invalid gasLimit")
 	}
 }
 

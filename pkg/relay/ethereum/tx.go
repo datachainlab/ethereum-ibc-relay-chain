@@ -4,8 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/avast/retry-go"
-	"time"
+	math "math"
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/gogoproto/proto"
@@ -13,20 +12,23 @@ import (
 	conntypes "github.com/cosmos/ibc-go/v7/modules/core/03-connection/types"
 	chantypes "github.com/cosmos/ibc-go/v7/modules/core/04-channel/types"
 	"github.com/cosmos/ibc-go/v7/modules/core/exported"
+	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	gethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/hyperledger-labs/yui-relayer/core"
+	"github.com/hyperledger-labs/yui-relayer/log"
 
 	"github.com/datachainlab/ethereum-ibc-relay-chain/pkg/contract/ibchandler"
 )
 
-const (
-	txOptsRetryDelay    = time.Second
-	txOptsRetryAttempts = 10
-)
-
 // SendMsgs sends msgs to the chain
 func (c *Chain) SendMsgs(msgs []sdk.Msg) ([]core.MsgID, error) {
+	ctx := context.TODO()
+	// if src's connection is OPEN, dst's connection is OPEN or TRYOPEN, so we can skip to update client commitments
+	skipUpdateClientCommitment, err := c.confirmConnectionOpened(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to confirm connection opened: %w", err)
+	}
 	logger := c.GetChainLogger()
 	var msgIDs []core.MsgID
 	for i, msg := range msgs {
@@ -34,48 +36,32 @@ func (c *Chain) SendMsgs(msgs []sdk.Msg) ([]core.MsgID, error) {
 			tx  *gethtypes.Transaction
 			err error
 		)
-		ctx := context.Background()
-		var opts *bind.TransactOpts
-		if err := retry.Do(func() error {
-			var err error
-			opts, err = c.TxOpts(ctx)
-			return err
-		}, retry.Delay(txOptsRetryDelay), retry.Attempts(txOptsRetryAttempts)); err != nil {
-			return nil, fmt.Errorf("failed to prepare TransactOpts: %v", err)
-		}
-		switch msg := msg.(type) {
-		case *clienttypes.MsgCreateClient:
-			tx, err = c.TxCreateClient(opts, msg)
-		case *clienttypes.MsgUpdateClient:
-			tx, err = c.TxUpdateClient(opts, msg)
-		case *conntypes.MsgConnectionOpenInit:
-			tx, err = c.TxConnectionOpenInit(opts, msg)
-		case *conntypes.MsgConnectionOpenTry:
-			tx, err = c.TxConnectionOpenTry(opts, msg)
-		case *conntypes.MsgConnectionOpenAck:
-			tx, err = c.TxConnectionOpenAck(opts, msg)
-		case *conntypes.MsgConnectionOpenConfirm:
-			tx, err = c.TxConnectionOpenConfirm(opts, msg)
-		case *chantypes.MsgChannelOpenInit:
-			tx, err = c.TxChannelOpenInit(opts, msg)
-		case *chantypes.MsgChannelOpenTry:
-			tx, err = c.TxChannelOpenTry(opts, msg)
-		case *chantypes.MsgChannelOpenAck:
-			tx, err = c.TxChannelOpenAck(opts, msg)
-		case *chantypes.MsgChannelOpenConfirm:
-			tx, err = c.TxChannelOpenConfirm(opts, msg)
-		case *chantypes.MsgRecvPacket:
-			tx, err = c.TxRecvPacket(opts, msg)
-		case *chantypes.MsgAcknowledgement:
-			tx, err = c.TxAcknowledgement(opts, msg)
-		// case *transfertypes.MsgTransfer:
-		// 	err = c.client.transfer(msg)
-		default:
-			logger.Error("failed to send msg", errors.New("illegal msg type"), "msg", msg)
-			panic("illegal msg type")
-		}
+		opts, err := c.TxOpts(ctx)
 		if err != nil {
-			logger.Error("failed to send msg", err, "msg", msg)
+			return nil, err
+		}
+		opts.GasLimit = math.MaxUint64
+		opts.NoSend = true
+		tx, err = c.SendTx(opts, msg, skipUpdateClientCommitment)
+		if err != nil {
+			logger.Error("failed to send msg / NoSend: true", err, "msg", msg)
+			return nil, err
+		}
+		estimatedGas, err := c.client.EstimateGasFromTx(ctx, tx)
+		if err != nil {
+			logger.Error("failed to estimate gas", err, "msg", msg)
+			return nil, err
+		}
+		txGasLimit := estimatedGas * c.Config().GasEstimateRate.Numerator / c.Config().GasEstimateRate.Denominator
+		if txGasLimit > c.Config().MaxGasLimit {
+			logger.Warn("estimated gas exceeds max gas limit", "estimated_gas", txGasLimit, "max_gas_limit", c.Config().MaxGasLimit)
+			txGasLimit = c.Config().MaxGasLimit
+		}
+		opts.GasLimit = txGasLimit
+		opts.NoSend = false
+		tx, err = c.SendTx(opts, msg, skipUpdateClientCommitment)
+		if err != nil {
+			logger.Error("failed to send msg / NoSend: false", err, "msg", msg)
 			return nil, err
 		}
 		if receipt, revertReason, err := c.client.WaitForReceiptAndGet(ctx, tx.Hash(), c.config.EnableDebugTrace); err != nil {
@@ -125,20 +111,38 @@ func (c *Chain) TxCreateClient(opts *bind.TransactOpts, msg *clienttypes.MsgCrea
 	}
 	return c.ibcHandler.CreateClient(opts, ibchandler.IIBCClientMsgCreateClient{
 		ClientType:          clientState.ClientType(),
-		ClientStateBytes:    clientStateBytes,
-		ConsensusStateBytes: consensusStateBytes,
+		ProtoClientState:    clientStateBytes,
+		ProtoConsensusState: consensusStateBytes,
 	})
 }
 
-func (c *Chain) TxUpdateClient(opts *bind.TransactOpts, msg *clienttypes.MsgUpdateClient) (*gethtypes.Transaction, error) {
-	headerBytes, err := proto.Marshal(msg.ClientMessage)
+func (c *Chain) TxUpdateClient(opts *bind.TransactOpts, msg *clienttypes.MsgUpdateClient, skipUpdateClientCommitment bool) (*gethtypes.Transaction, error) {
+	clientMessageBytes, err := proto.Marshal(msg.ClientMessage)
 	if err != nil {
 		return nil, err
 	}
-	return c.ibcHandler.UpdateClient(opts, ibchandler.IIBCClientMsgUpdateClient{
-		ClientId:      msg.ClientId,
-		ClientMessage: headerBytes,
-	})
+	m := ibchandler.IIBCClientMsgUpdateClient{
+		ClientId:           msg.ClientId,
+		ProtoClientMessage: clientMessageBytes,
+	}
+	// if `skipUpdateClientCommitment` is true and `allowLCFunctions` is not nil,
+	// the relayer calls `routeUpdateClient` to constructs an UpdateClient tx to the LC contract.
+	// ref. https://github.com/hyperledger-labs/yui-ibc-solidity/blob/main/docs/adr/adr-001.md
+	if skipUpdateClientCommitment && c.allowLCFunctions != nil {
+		lcAddr, fnSel, args, err := c.ibcHandler.RouteUpdateClient(c.CallOpts(opts.Context, 0), m)
+		if err != nil {
+			return nil, fmt.Errorf("failed to route update client: %w", err)
+		}
+		// ensure that the contract and function are allowed
+		if c.allowLCFunctions.IsAllowed(lcAddr, fnSel) {
+			log.GetLogger().Info("contract function is allowed", "contract", lcAddr.Hex(), "selector", fmt.Sprintf("0x%x", fnSel))
+			calldata := append(fnSel[:], args...)
+			return bind.NewBoundContract(lcAddr, abi.ABI{}, c.client, c.client, c.client).RawTransact(opts, calldata)
+		}
+		// fallback to send an UpdateClient to the IBC handler contract
+		log.GetLogger().Warn("contract function is not allowed", "contract", lcAddr.Hex(), "selector", fmt.Sprintf("0x%x", fnSel))
+	}
+	return c.ibcHandler.UpdateClient(opts, m)
 }
 
 func (c *Chain) TxConnectionOpenInit(opts *bind.TransactOpts, msg *conntypes.MsgConnectionOpenInit) (*gethtypes.Transaction, error) {
@@ -168,15 +172,16 @@ func (c *Chain) TxConnectionOpenTry(opts *bind.TransactOpts, msg *conntypes.MsgC
 			ConnectionId: msg.Counterparty.ConnectionId,
 			Prefix:       ibchandler.MerklePrefixData(msg.Counterparty.Prefix),
 		},
-		DelayPeriod:          msg.DelayPeriod,
-		ClientId:             msg.ClientId,
-		ClientStateBytes:     clientStateBytes,
-		CounterpartyVersions: versions,
-		ProofInit:            msg.ProofInit,
-		ProofClient:          msg.ProofClient,
-		ProofConsensus:       msg.ProofConsensus,
-		ProofHeight:          pbToHandlerHeight(msg.ProofHeight),
-		ConsensusHeight:      pbToHandlerHeight(msg.ConsensusHeight),
+		DelayPeriod:             msg.DelayPeriod,
+		ClientId:                msg.ClientId,
+		ClientStateBytes:        clientStateBytes,
+		CounterpartyVersions:    versions,
+		ProofInit:               msg.ProofInit,
+		ProofClient:             msg.ProofClient,
+		ProofConsensus:          msg.ProofConsensus,
+		ProofHeight:             pbToHandlerHeight(msg.ProofHeight),
+		ConsensusHeight:         pbToHandlerHeight(msg.ConsensusHeight),
+		HostConsensusStateProof: msg.HostConsensusStateProof,
 	})
 }
 
@@ -198,6 +203,7 @@ func (c *Chain) TxConnectionOpenAck(opts *bind.TransactOpts, msg *conntypes.MsgC
 		ProofConsensus:           msg.ProofConsensus,
 		ProofHeight:              pbToHandlerHeight(msg.ProofHeight),
 		ConsensusHeight:          pbToHandlerHeight(msg.ConsensusHeight),
+		HostConsensusStateProof:  msg.HostConsensusStateProof,
 	})
 }
 
@@ -291,4 +297,44 @@ func (c *Chain) TxAcknowledgement(opts *bind.TransactOpts, msg *chantypes.MsgAck
 		Proof:           msg.ProofAcked,
 		ProofHeight:     pbToHandlerHeight(msg.ProofHeight),
 	})
+}
+
+func (c *Chain) SendTx(opts *bind.TransactOpts, msg sdk.Msg, skipUpdateClientCommitment bool) (*gethtypes.Transaction, error) {
+	logger := c.GetChainLogger()
+	var (
+		tx  *gethtypes.Transaction
+		err error
+	)
+	switch msg := msg.(type) {
+	case *clienttypes.MsgCreateClient:
+		tx, err = c.TxCreateClient(opts, msg)
+	case *clienttypes.MsgUpdateClient:
+		tx, err = c.TxUpdateClient(opts, msg, skipUpdateClientCommitment)
+	case *conntypes.MsgConnectionOpenInit:
+		tx, err = c.TxConnectionOpenInit(opts, msg)
+	case *conntypes.MsgConnectionOpenTry:
+		tx, err = c.TxConnectionOpenTry(opts, msg)
+	case *conntypes.MsgConnectionOpenAck:
+		tx, err = c.TxConnectionOpenAck(opts, msg)
+	case *conntypes.MsgConnectionOpenConfirm:
+		tx, err = c.TxConnectionOpenConfirm(opts, msg)
+	case *chantypes.MsgChannelOpenInit:
+		tx, err = c.TxChannelOpenInit(opts, msg)
+	case *chantypes.MsgChannelOpenTry:
+		tx, err = c.TxChannelOpenTry(opts, msg)
+	case *chantypes.MsgChannelOpenAck:
+		tx, err = c.TxChannelOpenAck(opts, msg)
+	case *chantypes.MsgChannelOpenConfirm:
+		tx, err = c.TxChannelOpenConfirm(opts, msg)
+	case *chantypes.MsgRecvPacket:
+		tx, err = c.TxRecvPacket(opts, msg)
+	case *chantypes.MsgAcknowledgement:
+		tx, err = c.TxAcknowledgement(opts, msg)
+	// case *transfertypes.MsgTransfer:
+	// 	err = c.client.transfer(msg)
+	default:
+		logger.Error("failed to send msg", errors.New("illegal msg type"), "msg", msg)
+		panic("illegal msg type")
+	}
+	return tx, err
 }

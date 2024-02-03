@@ -22,9 +22,8 @@ func (chain *Chain) CallOpts(ctx context.Context, height int64) *bind.CallOpts {
 
 func (chain *Chain) TxOpts(ctx context.Context) (*bind.TransactOpts, error) {
 	txOpts := &bind.TransactOpts{
-		From:     chain.signer.Address(),
-		GasLimit: chain.config.GasLimit,
-		Signer:   chain.signer.Sign,
+		From:   chain.signer.Address(),
+		Signer: chain.signer.Sign,
 	}
 	switch chain.config.TxType {
 	case TxTypeLegacy:
