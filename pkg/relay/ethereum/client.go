@@ -23,7 +23,7 @@ func (chain *Chain) TxOpts(ctx context.Context) (*bind.TransactOpts, error) {
 		From:   chain.signer.Address(),
 		Signer: chain.signer.Sign,
 	}
-	if err := NewGasOptionBuilder(chain.client, &chain.config).Set(ctx, txOpts); err != nil {
+	if err := NewGasFeeCalculator(chain.client, &chain.config).Apply(ctx, txOpts); err != nil {
 		return nil, err
 	}
 	return txOpts, nil

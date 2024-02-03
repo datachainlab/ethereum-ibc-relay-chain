@@ -16,9 +16,9 @@ func Test_TxOpts_LegacyTx(t *testing.T) {
 	}
 	config := createConfig()
 	config.TxType = "legacy"
-	builder := NewGasOptionBuilder(ethClient, config)
+	calculator := NewGasFeeCalculator(ethClient, config)
 	txOpts := &bind.TransactOpts{}
-	if err = builder.Set(context.Background(), txOpts); err != nil {
+	if err = calculator.Apply(context.Background(), txOpts); err != nil {
 		t.Fatal(err)
 	}
 	if txOpts.GasTipCap != nil {
@@ -38,9 +38,9 @@ func Test_TxOpts_DynamicTx(t *testing.T) {
 		t.Fatal(err)
 	}
 	config := createConfig()
-	builder := NewGasOptionBuilder(ethClient, config)
+	calculator := NewGasFeeCalculator(ethClient, config)
 	txOpts := &bind.TransactOpts{}
-	if err = builder.Set(context.Background(), txOpts); err != nil {
+	if err = calculator.Apply(context.Background(), txOpts); err != nil {
 		t.Fatal(err)
 	}
 	if txOpts.GasTipCap == nil || txOpts.GasTipCap.Cmp(big.NewInt(0)) == 0 {
@@ -61,9 +61,9 @@ func Test_TxOpts_AutoTx(t *testing.T) {
 	}
 	config := createConfig()
 	config.TxType = "auto"
-	builder := NewGasOptionBuilder(ethClient, config)
+	calculator := NewGasFeeCalculator(ethClient, config)
 	txOpts := &bind.TransactOpts{}
-	if err = builder.Set(context.Background(), txOpts); err != nil {
+	if err = calculator.Apply(context.Background(), txOpts); err != nil {
 		t.Fatal(err)
 	}
 	if txOpts.GasTipCap != nil {

@@ -9,19 +9,19 @@ import (
 	"math/big"
 )
 
-type GasOptionBuilder struct {
+type GasFeeCalculator struct {
 	client *client.ETHClient
 	config *ChainConfig
 }
 
-func NewGasOptionBuilder(client *client.ETHClient, config *ChainConfig) *GasOptionBuilder {
-	return &GasOptionBuilder{
+func NewGasFeeCalculator(client *client.ETHClient, config *ChainConfig) *GasFeeCalculator {
+	return &GasFeeCalculator{
 		client: client,
 		config: config,
 	}
 }
 
-func (m *GasOptionBuilder) Set(ctx context.Context, txOpts *bind.TransactOpts) error {
+func (m *GasFeeCalculator) Apply(ctx context.Context, txOpts *bind.TransactOpts) error {
 	switch m.config.TxType {
 	case TxTypeLegacy:
 		gasPrice, err := m.client.SuggestGasPrice(ctx)
@@ -58,7 +58,7 @@ func (m *GasOptionBuilder) Set(ctx context.Context, txOpts *bind.TransactOpts) e
 	}
 }
 
-func (m *GasOptionBuilder) feeHistory(ctx context.Context) (*big.Int, *big.Int, error) {
+func (m *GasFeeCalculator) feeHistory(ctx context.Context) (*big.Int, *big.Int, error) {
 	rewardPercentile := float64(m.config.DynamicTxGasConfig.FeeHistoryRewardPercentile)
 	maxRetry := m.config.DynamicTxGasConfig.MaxRetryForFeeHistory
 
