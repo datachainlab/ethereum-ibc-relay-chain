@@ -3,6 +3,7 @@ package ethereum
 import (
 	"context"
 	"fmt"
+	"github.com/ethereum/go-ethereum"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
@@ -63,23 +64,36 @@ func (chain *Chain) TxOpts(ctx context.Context) (*bind.TransactOpts, error) {
 
 func (chain *Chain) feeHistory(ctx context.Context) (*big.Int, *big.Int, error) {
 	rewardPercentile := float64(chain.config.DynamicTxGasConfig.FeeHistoryRewardPercentile)
-	history, err := chain.Client().FeeHistory(ctx, 1, nil, []float64{rewardPercentile})
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to get feeHistory: %v", err)
-	}
-	if len(history.Reward) == 0 {
-		return nil, nil, fmt.Errorf("no reward found")
-	}
-	if len(history.Reward[0]) == 0 {
-		return nil, nil, fmt.Errorf("no reward found")
-	}
+	maxRetry := chain.config.DynamicTxGasConfig.MaxRetryForFeeHistory
 
+	latest, hErr := chain.Client().HeaderByNumber(ctx, nil)
+	if hErr != nil {
+		return nil, nil, fmt.Errorf("failed to get latest header: %v", hErr)
+	}
+	for i := uint32(0); i < maxRetry+1; i++ {
+		block := big.NewInt(0).Sub(latest.Number, big.NewInt(int64(i)))
+		history, err := chain.Client().FeeHistory(ctx, 1, block, []float64{rewardPercentile})
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to get feeHistory: %v", err)
+		}
+		if gasTipCap, baseFee, ok := getFeeInfo(history); ok {
+			return gasTipCap, baseFee, nil
+		}
+	}
+	return nil, nil, fmt.Errorf("no fee was found: latest=%v, maxRetry=%d", latest, maxRetry)
+}
+
+func getFeeInfo(v *ethereum.FeeHistory) (*big.Int, *big.Int, bool) {
+	if len(v.Reward) == 0 || len(v.Reward[0]) == 0 || v.Reward[0][0].Cmp(big.NewInt(0)) == 0 {
+		return nil, nil, false
+	}
+	gasTipCap := v.Reward[0][0]
+
+	if len(v.BaseFee) < 1 {
+		return nil, nil, false
+	}
 	// history.BaseFee[0] is baseFee (same as chain.Client().HeaderByNumber(ctx, nil).BaseFee)
 	// history.BaseFee[1] is nextBaseFee
-	if len(history.BaseFee) < 1 {
-		return nil, nil, fmt.Errorf("insufficient base fee")
-	}
-	gasTipCap := history.Reward[0][0]
-	baseFee := history.BaseFee[0]
-	return gasTipCap, baseFee, nil
+	baseFee := v.BaseFee[0]
+	return gasTipCap, baseFee, true
 }

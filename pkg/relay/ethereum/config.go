@@ -75,6 +75,9 @@ func (c ChainConfig) Validate() error {
 			if err := gasConfig.BaseFeeRate.Validate(); err != nil {
 				errs = append(errs, fmt.Errorf("config attribute \"base_fee_rate\" is invalid: %v", err))
 			}
+			if gasConfig.MaxRetryForFeeHistory == 0 {
+				errs = append(errs, fmt.Errorf("config attribute \"max_retry_for_fee_history\" is zero"))
+			}
 		}
 	}
 	return errors.Join(errs...)

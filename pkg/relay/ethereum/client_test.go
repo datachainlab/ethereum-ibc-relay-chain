@@ -106,6 +106,7 @@ func createConfig() *ethereum.ChainConfig {
 			},
 			//https://github.com/NomicFoundation/hardhat/blob/197118fb9f92034d250e7e7d12f69e28f960d3b1/packages/hardhat-core/src/internal/core/providers/gas-providers.ts#L248
 			FeeHistoryRewardPercentile: 50,
+			MaxRetryForFeeHistory:      1,
 		},
 	}
 }
