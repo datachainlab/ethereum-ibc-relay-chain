@@ -169,6 +169,9 @@ func (gsc *DynamicTxGasConfig) ValidateBasic() error {
 			return fmt.Errorf("config attribute \"limit_priority_fee_per_gas\" is invalid: %v", err)
 		}
 	}
+	if gsc.PriorityFeeRate == nil {
+		return fmt.Errorf("config attribute \"priority_fee_rate\" is nil")
+	}
 	if err := gsc.PriorityFeeRate.Validate(); err != nil {
 		return fmt.Errorf("config attribute \"priority_fee_rate\" is invalid: %v", err)
 	}
@@ -177,11 +180,17 @@ func (gsc *DynamicTxGasConfig) ValidateBasic() error {
 			return fmt.Errorf("config attribute \"limit_fee_per_gas\" is invalid: %v", err)
 		}
 	}
+	if gsc.BaseFeeRate == nil {
+		return fmt.Errorf("config attribute \"base_fee_rate\" is nil")
+	}
 	if err := gsc.BaseFeeRate.Validate(); err != nil {
 		return fmt.Errorf("config attribute \"base_fee_rate\" is invalid: %v", err)
 	}
 	if gsc.MaxRetryForFeeHistory == 0 {
 		return fmt.Errorf("config attribute \"max_retry_for_fee_history\" is zero")
+	}
+	if gsc.FeeHistoryRewardPercentile == 0 {
+		return fmt.Errorf("config attribute \"fee_history_reward_percentile\" is zero")
 	}
 	return nil
 }
