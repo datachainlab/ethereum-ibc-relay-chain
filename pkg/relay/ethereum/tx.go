@@ -36,7 +36,10 @@ func (c *Chain) SendMsgs(msgs []sdk.Msg) ([]core.MsgID, error) {
 			tx  *gethtypes.Transaction
 			err error
 		)
-		opts := c.TxOpts(ctx)
+		opts, err := c.TxOpts(ctx)
+		if err != nil {
+			return nil, err
+		}
 		opts.GasLimit = math.MaxUint64
 		opts.NoSend = true
 		tx, err = c.SendTx(opts, msg, skipUpdateClientCommitment)

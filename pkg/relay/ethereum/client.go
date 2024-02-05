@@ -18,9 +18,13 @@ func (chain *Chain) CallOpts(ctx context.Context, height int64) *bind.CallOpts {
 	return opts
 }
 
-func (chain *Chain) TxOpts(ctx context.Context) *bind.TransactOpts {
-	return &bind.TransactOpts{
+func (chain *Chain) TxOpts(ctx context.Context) (*bind.TransactOpts, error) {
+	txOpts := &bind.TransactOpts{
 		From:   chain.signer.Address(),
 		Signer: chain.signer.Sign,
 	}
+	if err := NewGasFeeCalculator(chain.client, &chain.config).Apply(ctx, txOpts); err != nil {
+		return nil, err
+	}
+	return txOpts, nil
 }
