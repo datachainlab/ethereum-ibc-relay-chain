@@ -110,7 +110,7 @@ func (m *Logic) replacePendingTx(ctx context.Context, tx *types.Transaction) err
 		return fmt.Errorf("\"replace_tx_config\" in chain config is required to replace tx")
 	}
 
-	gasToReplace, err := parseGasInfo(cfg)
+	gasToReplace, err := parseGasFee(cfg)
 	if err != nil {
 		return err
 	}
@@ -219,7 +219,7 @@ func add(x *big.Int, y *big.Int) *big.Int {
 	return new(big.Int).Add(x, y)
 }
 
-func parseGasInfo(cfg *ethereum.ReplaceTxConfig) (*gasFees, error) {
+func parseGasFee(cfg *ethereum.ReplaceTxConfig) (*gasFees, error) {
 	gasPriceInc, err := utils.ParseEtherAmount(cfg.GasPriceInc)
 	if err != nil {
 		return nil, err

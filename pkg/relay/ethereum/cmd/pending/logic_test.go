@@ -1,6 +1,7 @@
 package pending
 
 import (
+	"github.com/datachainlab/ethereum-ibc-relay-chain/pkg/relay/ethereum"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/holiman/uint256"
 	"math/big"
@@ -153,5 +154,38 @@ func TestErrorCopyTxData(t *testing.T) {
 	_, err = logic.copyTxData(src, opts)
 	if err == nil {
 		t.Error("unexpected success for DynamicTx GasFeeCap")
+	}
+}
+
+func TestParseGasFee(t *testing.T) {
+	cfg := &ethereum.ReplaceTxConfig{
+		GasTipCapInc: "1wei",
+		MaxGasTipCap: "2ether",
+		GasFeeCapInc: "3gwei",
+		MaxGasFeeCap: "10wei",
+		GasPriceInc:  "20ether",
+		MaxGasPrice:  "30gwei",
+	}
+	gas, err := parseGasFee(cfg)
+	if err != nil {
+		t.Fatal("must success")
+	}
+	if gas.GasTipCapInc.Uint64() != uint64(1) {
+		t.Errorf("invalid GasTipCapInc: %v", gas.GasTipCapInc)
+	}
+	if gas.MaxGasTipCap.String() != "2000000000000000000" {
+		t.Errorf("invalid MaxGasTipCap: %v", gas.MaxGasTipCap)
+	}
+	if gas.GasFeeCapInc.Uint64() != uint64(3000000000) {
+		t.Errorf("invalid GasFeeCapInc: %v", gas.GasFeeCapInc)
+	}
+	if gas.MaxGasFeeCap.Uint64() != uint64(10) {
+		t.Errorf("invalid MaxGasFeeCap: %v", gas.MaxGasFeeCap)
+	}
+	if gas.GasPriceInc.String() != "20000000000000000000" {
+		t.Errorf("invalid GasPriceInc: %v", gas.GasPriceInc)
+	}
+	if gas.MaxGasPrice.Uint64() != uint64(30000000000) {
+		t.Errorf("invalid MaxGasPrice: %v", gas.MaxGasPrice)
 	}
 }
