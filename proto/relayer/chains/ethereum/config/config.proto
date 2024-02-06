@@ -35,7 +35,7 @@ message ChainConfig {
   string tx_type = 14;
   DynamicTxGasConfig dynamic_tx_gas_config = 15;
 
-  ReplaceConfig replaceConfig = 16;
+  ReplaceTxConfig replace_tx_config = 16;
 }
 
 message AllowLCFunctionsConfig {
@@ -58,19 +58,19 @@ message DynamicTxGasConfig {
   uint32 max_retry_for_fee_history = 6;
 }
 
-message ReplaceConfig {
-  uint64 pendingDurationToReplace = 1;
-  uint64 checkInterval = 2;
+message ReplaceTxConfig {
+  uint64 pending_duration_to_replace = 1;
+  uint64 check_interval = 2;
 
   // for DynamicTx, BlobTx
-  string gasTipCapInc = 3;
-  string maxGasTipCap = 4;
-  string gasFeeCapInc = 5;
-  string maxGasFeeCap = 6;
+  string gas_tip_cap_inc = 3;
+  string max_gas_tip_cap = 4;
+  string gas_fee_cap_inc = 5;
+  string max_gas_fee_cap = 6;
 
   // for LegacyTx, AccessListTx
-  string gasPriceInc = 7;
-  string maxGasPrice = 8;
+  string gas_price_inc = 7;
+  string max_gas_price = 8;
 }
 
 

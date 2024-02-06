@@ -1,4 +1,4 @@
-package cmd
+package pending
 
 import (
 	"github.com/ethereum/go-ethereum/core/types"
@@ -8,8 +8,8 @@ import (
 )
 
 func TestSuccessCopyTxData(t *testing.T) {
-	model := pendingModel{}
-	opts := gasInfo{
+	logic := Logic{}
+	opts := &gasFees{
 		GasTipCapInc: big.NewInt(10),
 		MaxGasTipCap: big.NewInt(1000),
 		GasFeeCapInc: big.NewInt(100),
@@ -23,7 +23,7 @@ func TestSuccessCopyTxData(t *testing.T) {
 		GasPrice: big.NewInt(19800),
 		Gas:      0,
 	})
-	txData, err := model.copyTxData(src, opts)
+	txData, err := logic.copyTxData(src, opts)
 	if err != nil {
 		t.Error(err)
 	}
@@ -37,7 +37,7 @@ func TestSuccessCopyTxData(t *testing.T) {
 		GasPrice: big.NewInt(19800),
 		Gas:      0,
 	})
-	txData, err = model.copyTxData(src, opts)
+	txData, err = logic.copyTxData(src, opts)
 	if err != nil {
 		t.Error(err)
 	}
@@ -52,7 +52,7 @@ func TestSuccessCopyTxData(t *testing.T) {
 		GasFeeCap: big.NewInt(9900),
 		Gas:       0,
 	})
-	txData, err = model.copyTxData(src, opts)
+	txData, err = logic.copyTxData(src, opts)
 	if err != nil {
 		t.Error(err)
 	}
@@ -70,7 +70,7 @@ func TestSuccessCopyTxData(t *testing.T) {
 		GasFeeCap: uint256.NewInt(9900),
 		Gas:       0,
 	})
-	txData, err = model.copyTxData(src, opts)
+	txData, err = logic.copyTxData(src, opts)
 	if err != nil {
 		t.Error(err)
 	}
@@ -85,8 +85,8 @@ func TestSuccessCopyTxData(t *testing.T) {
 }
 
 func TestErrorCopyTxData(t *testing.T) {
-	model := pendingModel{}
-	opts := gasInfo{
+	logic := Logic{}
+	opts := &gasFees{
 		GasTipCapInc: big.NewInt(10),
 		MaxGasTipCap: big.NewInt(1000),
 		GasFeeCapInc: big.NewInt(100),
@@ -100,7 +100,7 @@ func TestErrorCopyTxData(t *testing.T) {
 		GasPrice: big.NewInt(19801),
 		Gas:      0,
 	})
-	_, err := model.copyTxData(src, opts)
+	_, err := logic.copyTxData(src, opts)
 	if err == nil {
 		t.Error("unexpected success for LegacyTx")
 	}
@@ -110,7 +110,7 @@ func TestErrorCopyTxData(t *testing.T) {
 		GasPrice: big.NewInt(19801),
 		Gas:      0,
 	})
-	_, err = model.copyTxData(src, opts)
+	_, err = logic.copyTxData(src, opts)
 	if err == nil {
 		t.Error("unexpected success for AccessListTx")
 	}
@@ -121,7 +121,7 @@ func TestErrorCopyTxData(t *testing.T) {
 		GasFeeCap: big.NewInt(1000),
 		Gas:       0,
 	})
-	_, err = model.copyTxData(src, opts)
+	_, err = logic.copyTxData(src, opts)
 	if err == nil {
 		t.Error("unexpected success for DynamicTx GasTipCap")
 	}
@@ -130,7 +130,7 @@ func TestErrorCopyTxData(t *testing.T) {
 		GasFeeCap: big.NewInt(9901),
 		Gas:       0,
 	})
-	_, err = model.copyTxData(src, opts)
+	_, err = logic.copyTxData(src, opts)
 	if err == nil {
 		t.Error("unexpected success for DynamicTx GasFeeCap")
 	}
@@ -141,7 +141,7 @@ func TestErrorCopyTxData(t *testing.T) {
 		GasFeeCap: uint256.NewInt(9900),
 		Gas:       0,
 	})
-	_, err = model.copyTxData(src, opts)
+	_, err = logic.copyTxData(src, opts)
 	if err == nil {
 		t.Error("unexpected success for DynamicTx GasTipCap")
 	}
@@ -150,7 +150,7 @@ func TestErrorCopyTxData(t *testing.T) {
 		GasFeeCap: uint256.NewInt(9901),
 		Gas:       0,
 	})
-	_, err = model.copyTxData(src, opts)
+	_, err = logic.copyTxData(src, opts)
 	if err == nil {
 		t.Error("unexpected success for DynamicTx GasFeeCap")
 	}

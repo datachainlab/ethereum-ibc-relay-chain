@@ -78,6 +78,11 @@ func (c ChainConfig) Validate() error {
 			}
 		}
 	}
+	if c.ReplaceTxConfig != nil {
+		if err := c.ReplaceTxConfig.ValidateBasic(); err != nil {
+			errs = append(errs, fmt.Errorf("config attribute \"replace_tx_config\" is invalid: %v", err))
+		}
+	}
 	return errors.Join(errs...)
 }
 
@@ -213,4 +218,32 @@ func (c *DynamicTxGasConfig) GetLimitFeePerGas() *big.Int {
 	} else {
 		return limit
 	}
+}
+
+func (rc *ReplaceTxConfig) ValidateBasic() error {
+	if rc.PendingDurationToReplace == 0 {
+		return fmt.Errorf("config attribute \"pending_duration_to_replace\" is zero")
+	}
+	if rc.CheckInterval == 0 {
+		return fmt.Errorf("config attribute \"check_interval\" is zero")
+	}
+	if _, err := utils.ParseEtherAmount(rc.GasTipCapInc); err != nil {
+		return fmt.Errorf("config attribute \"gas_tip_cap_inc\" is invalid: %v", err)
+	}
+	if _, err := utils.ParseEtherAmount(rc.MaxGasTipCap); err != nil {
+		return fmt.Errorf("config attribute \"max_gas_tip_cap\" is invalid: %v", err)
+	}
+	if _, err := utils.ParseEtherAmount(rc.GasFeeCapInc); err != nil {
+		return fmt.Errorf("config attribute \"gas_fee_cap_inc\" is invalid: %v", err)
+	}
+	if _, err := utils.ParseEtherAmount(rc.MaxGasFeeCap); err != nil {
+		return fmt.Errorf("config attribute \"max_gas_fee_cap\" is invalid: %v", err)
+	}
+	if _, err := utils.ParseEtherAmount(rc.GasPriceInc); err != nil {
+		return fmt.Errorf("config attribute \"gas_price_inc\" is invalid: %v", err)
+	}
+	if _, err := utils.ParseEtherAmount(rc.MaxGasPrice); err != nil {
+		return fmt.Errorf("config attribute \"max_gas_price\" is invalid: %v", err)
+	}
+	return nil
 }
