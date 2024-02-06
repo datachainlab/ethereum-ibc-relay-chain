@@ -44,6 +44,10 @@ type Chain struct {
 	ibcHandler *ibchandler.Ibchandler
 
 	signer Signer
+
+	// cache
+	connectionOpenedConfirmed bool
+	allowLCFunctions          *AllowLCFunctions
 }
 
 var _ core.Chain = (*Chain)(nil)
@@ -68,6 +72,13 @@ func NewChain(config ChainConfig) (*Chain, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to build signer: %v", err)
 	}
+	var alfs *AllowLCFunctions
+	if config.AllowLcFunctions != nil {
+		alfs, err = config.AllowLcFunctions.ToAllowLCFunctions()
+		if err != nil {
+			return nil, fmt.Errorf("failed to build allowLcFunctions: %v", err)
+		}
+	}
 	return &Chain{
 		config:  config,
 		client:  client,
@@ -75,7 +86,8 @@ func NewChain(config ChainConfig) (*Chain, error) {
 
 		ibcHandler: ibcHandler,
 
-		signer: signer,
+		signer:           signer,
+		allowLCFunctions: alfs,
 	}, nil
 }
 
@@ -324,6 +336,10 @@ func (c *Chain) QueryUnfinalizedRelayPackets(ctx core.QueryContext, counterparty
 		return nil, err
 	}
 
+	if checkpoint > ctx.Height().GetRevisionHeight() {
+		logger.Info("`send` checkpoint is greater than target height", "checkpoint", checkpoint, "height", ctx.Height().GetRevisionHeight())
+		return core.PacketInfoList{}, nil
+	}
 	packets, err := c.findSentPackets(ctx, checkpoint)
 	if err != nil {
 		logger.Error("failed to find sent packets", err)
@@ -383,6 +399,10 @@ func (c *Chain) QueryUnfinalizedRelayAcknowledgements(ctx core.QueryContext, cou
 		return nil, err
 	}
 
+	if checkpoint > ctx.Height().GetRevisionHeight() {
+		logger.Info("`recv` checkpoint is greater than target height", "checkpoint", checkpoint, "height", ctx.Height().GetRevisionHeight())
+		return core.PacketInfoList{}, nil
+	}
 	packets, err := c.findReceivedPackets(ctx, checkpoint)
 	if err != nil {
 		logger.Error("failed to find received packets", err)
@@ -437,4 +457,29 @@ func (c *Chain) GetChainLogger() *log.RelayLogger {
 	}
 	chainID := c.Path().ChainID
 	return logger.WithChain(chainID)
+}
+
+func (c *Chain) confirmConnectionOpened(ctx context.Context) (bool, error) {
+	if c.connectionOpenedConfirmed {
+		return true, nil
+	}
+	if c.pathEnd.ConnectionID == "" {
+		return false, nil
+	}
+	latestHeight, err := c.LatestHeight()
+	if err != nil {
+		return false, err
+	}
+	// NOTE: err is nil if the connection not found
+	connRes, err := c.QueryConnection(
+		core.NewQueryContext(ctx, latestHeight),
+	)
+	if err != nil {
+		return false, err
+	}
+	if connRes.Connection.State != conntypes.OPEN {
+		return false, nil
+	}
+	c.connectionOpenedConfirmed = true
+	return true, nil
 }
