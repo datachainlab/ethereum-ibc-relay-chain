@@ -229,3 +229,127 @@ func TestDynamicTxConfig(t *testing.T) {
 		})
 	}
 }
+
+func TestReplaceTxConfig(t *testing.T) {
+	var cases = []struct {
+		input ReplaceTxConfig
+		error bool
+	}{
+		{
+			input: ReplaceTxConfig{
+				PendingDurationToReplace: 1,
+				CheckInterval:            1,
+				GasTipCapInc:             "1wei",
+				MaxGasTipCap:             "2ether",
+				GasFeeCapInc:             "3gwei",
+				MaxGasFeeCap:             "10wei",
+				GasPriceInc:              "20ether",
+				MaxGasPrice:              "30gwei",
+			},
+			error: false,
+		},
+		{
+			input: ReplaceTxConfig{
+				CheckInterval: 1,
+				GasTipCapInc:  "1wei",
+				MaxGasTipCap:  "2ether",
+				GasFeeCapInc:  "3gwei",
+				MaxGasFeeCap:  "10wei",
+				GasPriceInc:   "20ether",
+				MaxGasPrice:   "30gwei",
+			},
+			error: true,
+		},
+		{
+			input: ReplaceTxConfig{
+				PendingDurationToReplace: 1,
+				GasTipCapInc:             "1wei",
+				MaxGasTipCap:             "2ether",
+				GasFeeCapInc:             "3gwei",
+				MaxGasFeeCap:             "10wei",
+				GasPriceInc:              "20ether",
+				MaxGasPrice:              "30gwei",
+			},
+			error: true,
+		},
+		{
+			input: ReplaceTxConfig{
+				PendingDurationToReplace: 1,
+				CheckInterval:            1,
+				MaxGasTipCap:             "2ether",
+				GasFeeCapInc:             "3gwei",
+				MaxGasFeeCap:             "10wei",
+				GasPriceInc:              "20ether",
+				MaxGasPrice:              "30gwei",
+			},
+			error: true,
+		},
+		{
+			input: ReplaceTxConfig{
+				PendingDurationToReplace: 1,
+				CheckInterval:            1,
+				GasTipCapInc:             "1wei",
+				GasFeeCapInc:             "3gwei",
+				MaxGasFeeCap:             "10wei",
+				GasPriceInc:              "20ether",
+				MaxGasPrice:              "30gwei",
+			},
+			error: true,
+		},
+		{
+			input: ReplaceTxConfig{
+				PendingDurationToReplace: 1,
+				CheckInterval:            1,
+				GasTipCapInc:             "1wei",
+				MaxGasTipCap:             "2ether",
+				MaxGasFeeCap:             "10wei",
+				GasPriceInc:              "20ether",
+				MaxGasPrice:              "30gwei",
+			},
+			error: true,
+		},
+		{
+			input: ReplaceTxConfig{
+				PendingDurationToReplace: 1,
+				CheckInterval:            1,
+				GasTipCapInc:             "1wei",
+				MaxGasTipCap:             "2ether",
+				GasFeeCapInc:             "3gwei",
+				GasPriceInc:              "20ether",
+				MaxGasPrice:              "30gwei",
+			},
+			error: true,
+		},
+		{
+			input: ReplaceTxConfig{
+				PendingDurationToReplace: 1,
+				CheckInterval:            1,
+				GasTipCapInc:             "1wei",
+				MaxGasTipCap:             "2ether",
+				GasFeeCapInc:             "3gwei",
+				MaxGasFeeCap:             "10wei",
+				MaxGasPrice:              "30gwei",
+			},
+			error: true,
+		},
+		{
+			input: ReplaceTxConfig{
+				PendingDurationToReplace: 1,
+				CheckInterval:            1,
+				GasTipCapInc:             "1wei",
+				MaxGasTipCap:             "2ether",
+				GasFeeCapInc:             "3gwei",
+				MaxGasFeeCap:             "10wei",
+				GasPriceInc:              "20ether",
+			},
+			error: true,
+		},
+	}
+	for i, c := range cases {
+		t.Run(fmt.Sprint(i), func(t *testing.T) {
+			require := require.New(t)
+			err := c.input.ValidateBasic()
+			require.Equal(c.error, err != nil, err)
+		})
+	}
+}
