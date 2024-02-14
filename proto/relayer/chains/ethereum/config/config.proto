@@ -34,6 +34,8 @@ message ChainConfig {
 
   string tx_type = 14;
   DynamicTxGasConfig dynamic_tx_gas_config = 15;
+
+  uint64 blocks_per_query = 16;
 }
 
 message AllowLCFunctionsConfig {

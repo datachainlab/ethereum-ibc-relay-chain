@@ -10,10 +10,15 @@ import (
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/hyperledger-labs/yui-relayer/core"
 	"github.com/hyperledger-labs/yui-relayer/log"
 
 	"github.com/datachainlab/ethereum-ibc-relay-chain/pkg/contract/ibchandler"
+)
+
+const (
+	BlocksPerQueryDefault = 1000
 )
 
 var (
@@ -62,21 +67,43 @@ func (chain *Chain) findSentPackets(ctx core.QueryContext, fromHeight uint64) (c
 		dstChannelID = channel.Counterparty.ChannelId
 	}
 
-	query := ethereum.FilterQuery{
-		FromBlock: big.NewInt(int64(fromHeight)),
-		ToBlock:   big.NewInt(int64(ctx.Height().GetRevisionHeight())),
-		Addresses: []common.Address{
-			chain.config.IBCAddress(),
-		},
-		Topics: [][]common.Hash{{
-			abiSendPacket.ID,
-		}},
+	blocksPerQuery := chain.config.BlocksPerQuery
+	if blocksPerQuery == 0 {
+		blocksPerQuery = BlocksPerQueryDefault
 	}
 
-	logs, err := chain.client.FilterLogs(ctx.Context(), query)
-	if err != nil {
-		logger.Error("failed to filter logs", err)
-		return nil, err
+	toHeight := ctx.Height().GetRevisionHeight()
+	totalBlocks := toHeight - fromHeight
+	loopCount := totalBlocks / blocksPerQuery
+	if totalBlocks%blocksPerQuery != 0 {
+		loopCount++
+	}
+	var logs []types.Log
+	for i := uint64(0); i < loopCount; i++ {
+		var endBlockNum uint64
+		if i == loopCount-1 {
+			endBlockNum = toHeight
+		} else {
+			endBlockNum = fromHeight + (i+1)*blocksPerQuery - 1
+		}
+		startBlock := big.NewInt(int64(fromHeight + i*blocksPerQuery))
+		endBlock := big.NewInt(int64(endBlockNum))
+		query := ethereum.FilterQuery{
+			FromBlock: startBlock,
+			ToBlock:   endBlock,
+			Addresses: []common.Address{
+				chain.config.IBCAddress(),
+			},
+			Topics: [][]common.Hash{{
+				abiSendPacket.ID,
+			}},
+		}
+		filterLogs, err := chain.client.FilterLogs(ctx.Context(), query)
+		if err != nil {
+			logger.Error("failed to filter logs", err)
+			return nil, err
+		}
+		logs = append(logs, filterLogs...)
 	}
 
 	defer logger.TimeTrack(now, "findSentPackets", "num_logs", len(logs))
