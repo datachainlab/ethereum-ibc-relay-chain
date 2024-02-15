@@ -44,12 +44,20 @@ func (c *Chain) SendMsgs(msgs []sdk.Msg) ([]core.MsgID, error) {
 		opts.NoSend = true
 		tx, err = c.SendTx(opts, msg, skipUpdateClientCommitment)
 		if err != nil {
-			logger.Error("failed to send msg / NoSend: true", err, "msg", msg)
+			logger.Error("failed to send msg / NoSend: true", err)
 			return nil, err
 		}
 		estimatedGas, err := c.client.EstimateGasFromTx(ctx, tx)
 		if err != nil {
-			logger.Error("failed to estimate gas", err, "msg", msg)
+			logger.Error("failed to estimate gas", err)
+			if c.config.EnableDebugTrace {
+				revertReason, err := c.client.DebugTraceTransaction(ctx, tx.Hash())
+				if err != nil {
+					logger.Error("debug trace transaction", err, "revert_reason", revertReason)
+				}
+				revertReason = GetRevertReason([]byte(revertReason), c.config.AbiPaths)
+				logger.Error("failed to estimate gas", err, "revert_reason", revertReason)
+			}
 			return nil, err
 		}
 		txGasLimit := estimatedGas * c.Config().GasEstimateRate.Numerator / c.Config().GasEstimateRate.Denominator
@@ -61,20 +69,32 @@ func (c *Chain) SendMsgs(msgs []sdk.Msg) ([]core.MsgID, error) {
 		opts.NoSend = false
 		tx, err = c.SendTx(opts, msg, skipUpdateClientCommitment)
 		if err != nil {
-			logger.Error("failed to send msg / NoSend: false", err, "msg", msg)
+			logger.Error("failed to send msg / NoSend: false", err)
 			return nil, err
 		}
-		if receipt, revertReason, err := c.client.WaitForReceiptAndGet(ctx, tx.Hash(), c.config.EnableDebugTrace); err != nil {
-			logger.Error("failed to get receipt", err, "msg", msg)
+		receipt, err := c.client.WaitForReceiptAndGet(ctx, tx.Hash())
+		if err != nil {
+			logger.Error("failed to get receipt", err)
 			return nil, err
-		} else if receipt.Status == gethtypes.ReceiptStatusFailed {
-			err := fmt.Errorf("tx execution failed: revertReason=%s, msgIndex=%d, msg=%v", revertReason, i, msg)
-			logger.Error("tx execution failed", err, "revert_reason", revertReason, "msg_index", i, "msg", msg)
+		}
+		if receipt.Status == gethtypes.ReceiptStatusFailed {
+			var revertReason string
+			if receipt.HasRevertReason() {
+				revertReason = GetRevertReason(receipt.RevertReason, c.config.AbiPaths)
+			} else if c.config.EnableDebugTrace {
+				revertReason, err = c.client.DebugTraceTransaction(ctx, tx.Hash())
+				if err != nil {
+					logger.Error("debug trace transaction", err, "revert_reason", revertReason)
+				}
+				revertReason = GetRevertReason([]byte(revertReason), c.config.AbiPaths)
+			}
+			err = fmt.Errorf("revert_reason=%s", revertReason)
+			logger.Error("tx execution failed", err, "msg_index", i)
 			return nil, err
 		}
 		if c.msgEventListener != nil {
 			if err := c.msgEventListener.OnSentMsg([]sdk.Msg{msg}); err != nil {
-				logger.Error("failed to OnSendMsg call", err, "msg", msg)
+				logger.Error("failed to OnSendMsg call", err)
 			}
 		}
 		msgIDs = append(msgIDs, NewMsgID(tx.Hash()))
@@ -83,17 +103,31 @@ func (c *Chain) SendMsgs(msgs []sdk.Msg) ([]core.MsgID, error) {
 }
 
 func (c *Chain) GetMsgResult(id core.MsgID) (core.MsgResult, error) {
+	logger := c.GetChainLogger()
 	msgID, ok := id.(*MsgID)
 	if !ok {
 		return nil, fmt.Errorf("unexpected message id type: %T", id)
 	}
-
-	receipt, revertReason, err := c.client.WaitForReceiptAndGet(context.TODO(), msgID.TxHash(), c.config.EnableDebugTrace)
+	ctx := context.TODO()
+	txHash := msgID.TxHash()
+	receipt, err := c.client.WaitForReceiptAndGet(ctx, txHash)
 	if err != nil {
 		return nil, err
 	}
-
-	return c.makeMsgResultFromReceipt(receipt, revertReason)
+	if receipt.Status == gethtypes.ReceiptStatusSuccessful {
+		return c.makeMsgResultFromReceipt(&receipt.Receipt, "")
+	}
+	var revertReason string
+	if receipt.HasRevertReason() {
+		revertReason = GetRevertReason(receipt.RevertReason, c.config.AbiPaths)
+	} else if c.config.EnableDebugTrace {
+		revertReason, err = c.client.DebugTraceTransaction(ctx, txHash)
+		if err != nil {
+			logger.Error("debug trace transaction", err, "revert_reason", revertReason)
+		}
+		revertReason = GetRevertReason([]byte(revertReason), c.config.AbiPaths)
+	}
+	return c.makeMsgResultFromReceipt(&receipt.Receipt, revertReason)
 }
 
 func (c *Chain) TxCreateClient(opts *bind.TransactOpts, msg *clienttypes.MsgCreateClient) (*gethtypes.Transaction, error) {

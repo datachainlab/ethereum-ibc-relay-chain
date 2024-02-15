@@ -36,6 +36,8 @@ message ChainConfig {
   DynamicTxGasConfig dynamic_tx_gas_config = 15;
 
   uint64 blocks_per_event_query = 16;
+
+  repeated string abi_paths = 17;
 }
 
 message AllowLCFunctionsConfig {
@@ -57,4 +59,3 @@ message DynamicTxGasConfig {
   uint32 fee_history_reward_percentile = 5;
   uint32 max_retry_for_fee_history = 6;
 }
-
