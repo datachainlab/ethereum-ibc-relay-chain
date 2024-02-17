@@ -50,12 +50,12 @@ func (c *Chain) SendMsgs(msgs []sdk.Msg) ([]core.MsgID, error) {
 		opts.NoSend = true
 		tx, err = c.SendTx(opts, msg, skipUpdateClientCommitment)
 		if err != nil {
-			logger.Error("failed to send msg / NoSend: true", err, "msg", msg)
+			logger.Error("failed to send msg / NoSend: true", err)
 			return nil, err
 		}
 		estimatedGas, err := c.client.EstimateGasFromTx(ctx, tx)
 		if err != nil {
-			logger.Error("failed to estimate gas", err, "msg", msg)
+			logger.Error("failed to estimate gas", err)
 			if c.config.EnableDebugTrace {
 				revertReason, err := c.DebugTraceTransaction(ctx, tx.Hash())
 				if err != nil {
@@ -74,13 +74,15 @@ func (c *Chain) SendMsgs(msgs []sdk.Msg) ([]core.MsgID, error) {
 		opts.NoSend = false
 		tx, err = c.SendTx(opts, msg, skipUpdateClientCommitment)
 		if err != nil {
-			logger.Error("failed to send msg / NoSend: false", err, "msg", msg)
+			logger.Error("failed to send msg / NoSend: false", err)
 			return nil, err
 		}
-		if receipt, err := c.client.WaitForReceiptAndGet(ctx, tx.Hash()); err != nil {
-			logger.Error("failed to get receipt", err, "msg", msg)
+		receipt, err := c.client.WaitForReceiptAndGet(ctx, tx.Hash())
+		if err != nil {
+			logger.Error("failed to get receipt", err)
 			return nil, err
-		} else if receipt.Status == gethtypes.ReceiptStatusFailed {
+		}
+		if receipt.Status == gethtypes.ReceiptStatusFailed {
 			var revertReason string
 			if receipt.HasRevertReason() {
 				revertReason = c.GetRevertReason(receipt)
@@ -92,12 +94,12 @@ func (c *Chain) SendMsgs(msgs []sdk.Msg) ([]core.MsgID, error) {
 				}
 			}
 			err = fmt.Errorf("revert_reason=%s", revertReason)
-			logger.Error("tx execution failed", err, "msg_index", i, "msg", msg)
+			logger.Error("tx execution failed", err, "msg_index", i)
 			return nil, err
 		}
 		if c.msgEventListener != nil {
 			if err := c.msgEventListener.OnSentMsg([]sdk.Msg{msg}); err != nil {
-				logger.Error("failed to OnSendMsg call", err, "msg", msg)
+				logger.Error("failed to OnSendMsg call", err)
 			}
 		}
 		msgIDs = append(msgIDs, NewMsgID(tx.Hash()))
@@ -496,6 +498,7 @@ type ErrorsRepository struct {
 }
 
 func NewErrorsRepository(customErrors []*CustomError) ErrorsRepository {
+	customErrors = append(customErrors, defaultError())
 	er := ErrorsRepository{
 		errs: make(map[[4]byte]abi.Error),
 	}
@@ -544,4 +547,16 @@ func (r *ErrorsRepository) ParseError(bz []byte) (string, interface{}, error) {
 	}
 	v, err := e.Unpack(bz)
 	return e.Sig, v, err
+}
+
+func defaultError() *CustomError {
+	customError := CustomError{
+		FunctionName: "Error",
+		Arguments: []*Argument{
+			{
+				Type: "string",
+			},
+		},
+	}
+	return &customError
 }
