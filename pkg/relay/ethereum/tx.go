@@ -498,7 +498,7 @@ type ErrorsRepository struct {
 }
 
 func NewErrorsRepository(customErrors []*CustomError) ErrorsRepository {
-	customErrors = append(customErrors, defaultError())
+	customErrors = append(customErrors, defaultErrors()...)
 	er := ErrorsRepository{
 		errs: make(map[[4]byte]abi.Error),
 	}
@@ -549,14 +549,24 @@ func (r *ErrorsRepository) ParseError(bz []byte) (string, interface{}, error) {
 	return e.Sig, v, err
 }
 
-func defaultError() *CustomError {
-	customError := CustomError{
-		FunctionName: "Error",
-		Arguments: []*Argument{
-			{
-				Type: "string",
+func defaultErrors() []*CustomError {
+	customErrors := []*CustomError{
+		{
+			FunctionName: "Error",
+			Arguments: []*Argument{
+				{
+					Type: "string",
+				},
+			},
+		},
+		{
+			FunctionName: "Panic",
+			Arguments: []*Argument{
+				{
+					Type: "uint256",
+				},
 			},
 		},
 	}
-	return &customError
+	return customErrors
 }
