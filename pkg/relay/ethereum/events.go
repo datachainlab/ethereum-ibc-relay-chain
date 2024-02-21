@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	BlocksPerQueryDefault = 1000
+	BlocksPerEventQueryDefault = 1000
 )
 
 var (
@@ -66,46 +66,11 @@ func (chain *Chain) findSentPackets(ctx core.QueryContext, fromHeight uint64) (c
 		dstPortID = channel.Counterparty.PortId
 		dstChannelID = channel.Counterparty.ChannelId
 	}
-
-	blocksPerQuery := chain.config.BlocksPerQuery
-	if blocksPerQuery == 0 {
-		blocksPerQuery = BlocksPerQueryDefault
+	logs, err := chain.filterLogs(ctx, fromHeight, abiSendPacket)
+	if err != nil {
+		logger.Error("failed to filter logs", err)
+		return nil, err
 	}
-
-	toHeight := ctx.Height().GetRevisionHeight()
-	totalBlocks := toHeight - fromHeight
-	loopCount := totalBlocks / blocksPerQuery
-	if totalBlocks%blocksPerQuery != 0 {
-		loopCount++
-	}
-	var logs []types.Log
-	for i := uint64(0); i < loopCount; i++ {
-		var endBlockNum uint64
-		if i == loopCount-1 {
-			endBlockNum = toHeight
-		} else {
-			endBlockNum = fromHeight + (i+1)*blocksPerQuery - 1
-		}
-		startBlock := big.NewInt(int64(fromHeight + i*blocksPerQuery))
-		endBlock := big.NewInt(int64(endBlockNum))
-		query := ethereum.FilterQuery{
-			FromBlock: startBlock,
-			ToBlock:   endBlock,
-			Addresses: []common.Address{
-				chain.config.IBCAddress(),
-			},
-			Topics: [][]common.Hash{{
-				abiSendPacket.ID,
-			}},
-		}
-		filterLogs, err := chain.client.FilterLogs(ctx.Context(), query)
-		if err != nil {
-			logger.Error("failed to filter logs", err)
-			return nil, err
-		}
-		logs = append(logs, filterLogs...)
-	}
-
 	defer logger.TimeTrack(now, "findSentPackets", "num_logs", len(logs))
 
 	var packets core.PacketInfoList
@@ -185,22 +150,10 @@ func (chain *Chain) findReceivedPackets(ctx core.QueryContext, fromHeight uint64
 }
 
 func (chain *Chain) findRecvPacketEvents(ctx core.QueryContext, fromHeight uint64) ([]*ibchandler.IbchandlerRecvPacket, error) {
-	query := ethereum.FilterQuery{
-		FromBlock: big.NewInt(int64(fromHeight)),
-		ToBlock:   big.NewInt(int64(ctx.Height().GetRevisionHeight())),
-		Addresses: []common.Address{
-			chain.config.IBCAddress(),
-		},
-		Topics: [][]common.Hash{{
-			abiRecvPacket.ID,
-		}},
-	}
-
-	logs, err := chain.client.FilterLogs(ctx.Context(), query)
+	logs, err := chain.filterLogs(ctx, fromHeight, abiRecvPacket)
 	if err != nil {
 		return nil, err
 	}
-
 	var events []*ibchandler.IbchandlerRecvPacket
 	for _, log := range logs {
 		event, err := chain.ibcHandler.ParseRecvPacket(log)
@@ -214,22 +167,10 @@ func (chain *Chain) findRecvPacketEvents(ctx core.QueryContext, fromHeight uint6
 }
 
 func (chain *Chain) findWriteAckEvents(ctx core.QueryContext, fromHeight uint64) ([]*ibchandler.IbchandlerWriteAcknowledgement, error) {
-	query := ethereum.FilterQuery{
-		FromBlock: big.NewInt(int64(fromHeight)),
-		ToBlock:   big.NewInt(int64(ctx.Height().GetRevisionHeight())),
-		Addresses: []common.Address{
-			chain.config.IBCAddress(),
-		},
-		Topics: [][]common.Hash{{
-			abiWriteAcknowledgement.ID,
-		}},
-	}
-
-	logs, err := chain.client.FilterLogs(ctx.Context(), query)
+	logs, err := chain.filterLogs(ctx, fromHeight, abiWriteAcknowledgement)
 	if err != nil {
 		return nil, err
 	}
-
 	var events []*ibchandler.IbchandlerWriteAcknowledgement
 	for _, log := range logs {
 		event, err := chain.ibcHandler.ParseWriteAcknowledgement(log)
@@ -251,4 +192,45 @@ func (chain *Chain) GetChannelLogger() *log.RelayLogger {
 	portID := chain.Path().PortID
 	channelID := chain.Path().ChannelID
 	return logger.WithChannel(chainID, portID, channelID)
+}
+
+func (chain *Chain) filterLogs(ctx core.QueryContext, fromHeight uint64, event abi.Event) ([]types.Log, error) {
+	blocksPerEventQuery := chain.config.BlocksPerEventQuery
+	if blocksPerEventQuery == 0 {
+		blocksPerEventQuery = BlocksPerEventQueryDefault
+	}
+
+	toHeight := ctx.Height().GetRevisionHeight()
+	totalBlocks := toHeight - fromHeight + 1
+	loopCount := totalBlocks / blocksPerEventQuery
+	if totalBlocks%blocksPerEventQuery != 0 {
+		loopCount++
+	}
+	var logs []types.Log
+	for i := uint64(0); i < loopCount; i++ {
+		var endBlockNum uint64
+		if i == loopCount-1 {
+			endBlockNum = toHeight
+		} else {
+			endBlockNum = fromHeight + (i+1)*blocksPerEventQuery - 1
+		}
+		startBlock := big.NewInt(int64(fromHeight + i*blocksPerEventQuery))
+		endBlock := big.NewInt(int64(endBlockNum))
+		query := ethereum.FilterQuery{
+			FromBlock: startBlock,
+			ToBlock:   endBlock,
+			Addresses: []common.Address{
+				chain.config.IBCAddress(),
+			},
+			Topics: [][]common.Hash{{
+				event.ID,
+			}},
+		}
+		filterLogs, err := chain.client.FilterLogs(ctx.Context(), query)
+		if err != nil {
+			return nil, err
+		}
+		logs = append(logs, filterLogs...)
+	}
+	return logs, nil
 }
