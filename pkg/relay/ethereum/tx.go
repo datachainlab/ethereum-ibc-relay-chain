@@ -7,6 +7,9 @@ import (
 	"fmt"
 	math "math"
 	"math/big"
+	"os"
+	"path/filepath"
+	"strings"
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/gogoproto/proto"
@@ -377,7 +380,40 @@ func (c *Chain) SendTx(opts *bind.TransactOpts, msg sdk.Msg, skipUpdateClientCom
 }
 
 func (c *Chain) GetRevertReason(receipt *client.Receipt) string {
-	erepo := NewErrorsRepository(c.config.CustomErrors)
+
+	var abiErrors []abi.Error
+
+	abiPaths := c.config.AbiPaths
+
+	for _, dir := range abiPaths {
+		if err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+			if !info.IsDir() && strings.HasSuffix(info.Name(), ".json") {
+				data, err := os.ReadFile(path)
+				if err != nil {
+					return err
+				}
+				abiData, err := abi.JSON(strings.NewReader(string(data)))
+				if err != nil {
+					return err
+				}
+				for _, error := range abiData.Errors {
+					abiErrors = append(abiErrors, error)
+				}
+			}
+			return nil
+		}); err != nil {
+			fmt.Printf("failed parsing abi files: %v\n", err)
+		}
+	}
+
+	erepo, err := NewErrorsRepository(abiErrors)
+	if err != nil {
+		return fmt.Sprintf("failed to create error repository: %v", err)
+	}
+
 	sig, args, err := erepo.ParseError(receipt.RevertReason)
 	if err != nil {
 		return fmt.Sprintf("raw-revert-reason=\"%x\" parse-err=\"%v\"", receipt.RevertReason, err)
@@ -497,27 +533,22 @@ type ErrorsRepository struct {
 	errs map[[4]byte]abi.Error
 }
 
-func NewErrorsRepository(customErrors []*CustomError) ErrorsRepository {
-	customErrors = append(customErrors, defaultErrors()...)
+func NewErrorsRepository(customErrors []abi.Error) (*ErrorsRepository, error) {
+	defaultErrs, err := defaultErrors()
+	if err != nil {
+		return nil, err
+	}
+	customErrors = append(customErrors, defaultErrs...)
 	er := ErrorsRepository{
 		errs: make(map[[4]byte]abi.Error),
 	}
 	for _, e := range customErrors {
-		var arguments []abi.Argument
-		for _, arg := range e.Arguments {
-			strT, err := abi.NewType(arg.Type, "", nil)
-			if err != nil {
-				panic(err)
-			}
-			arguments = append(arguments, abi.Argument{Type: strT})
-
-		}
-		e := abi.NewError(e.FunctionName, arguments)
+		e := abi.NewError(e.Name, e.Inputs)
 		if err := er.Add(e); err != nil {
-			panic(err)
+			return nil, err
 		}
 	}
-	return er
+	return &er, nil
 }
 
 func (r *ErrorsRepository) Add(e abi.Error) error {
@@ -549,24 +580,33 @@ func (r *ErrorsRepository) ParseError(bz []byte) (string, interface{}, error) {
 	return e.Sig, v, err
 }
 
-func defaultErrors() []*CustomError {
-	customErrors := []*CustomError{
+func defaultErrors() ([]abi.Error, error) {
+	strT, err := abi.NewType("string", "", nil)
+	if err != nil {
+		return nil, err
+	}
+	uintT, err := abi.NewType("uint256", "", nil)
+	if err != nil {
+		return nil, err
+	}
+
+	errors := []abi.Error{
 		{
-			FunctionName: "Error",
-			Arguments: []*Argument{
+			Name: "Error",
+			Inputs: []abi.Argument{
 				{
-					Type: "string",
+					Type: strT,
 				},
 			},
 		},
 		{
-			FunctionName: "Panic",
-			Arguments: []*Argument{
+			Name: "Panic",
+			Inputs: []abi.Argument{
 				{
-					Type: "uint256",
+					Type: uintT,
 				},
 			},
 		},
 	}
-	return customErrors
+	return errors, nil
 }

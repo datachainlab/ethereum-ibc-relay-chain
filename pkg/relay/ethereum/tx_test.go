@@ -6,13 +6,15 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/stretchr/testify/require"
 )
 
 func TestRevertReasonParserDefault(t *testing.T) {
-	customErrors := []*CustomError{}
+	customErrors := []abi.Error{}
 
-	erepo := NewErrorsRepository(customErrors)
+	erepo, err := NewErrorsRepository(customErrors)
+	require.NoError(t, err)
 	s, args, err := erepo.ParseError(
 		hexToBytes("0x08c379a00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000001a4e6f7420656e6f7567682045746865722070726f76696465642e000000000000"),
 	)
@@ -22,18 +24,23 @@ func TestRevertReasonParserDefault(t *testing.T) {
 }
 
 func TestRevertReasonParserAddedCustomError(t *testing.T) {
-	customErrors := []*CustomError{
+	uintT, err := abi.NewType("uint256", "", nil)
+	if err != nil {
+		panic(err)
+	}
+	customErrors := []abi.Error{
 		{
-			FunctionName: "AppError",
-			Arguments: []*Argument{
+			Name: "AppError",
+			Inputs: []abi.Argument{
 				{
-					Type: "uint256",
+					Type: uintT,
 				},
 			},
 		},
 	}
 
-	erepo := NewErrorsRepository(customErrors)
+	erepo, err := NewErrorsRepository(customErrors)
+	require.NoError(t, err)
 	s, args, err := erepo.ParseError(
 		hexToBytes("0x08c379a00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000001a4e6f7420656e6f7567682045746865722070726f76696465642e000000000000"),
 	)
@@ -43,29 +50,38 @@ func TestRevertReasonParserAddedCustomError(t *testing.T) {
 }
 
 func TestRevertReasonParserCustomError(t *testing.T) {
-	customErrors := []*CustomError{
+	strT, err := abi.NewType("string", "", nil)
+	if err != nil {
+		panic(err)
+	}
+	uintT, err := abi.NewType("uint256", "", nil)
+	if err != nil {
+		panic(err)
+	}
+	customErrors := []abi.Error{
 		{
-			FunctionName: "AppError",
-			Arguments: []*Argument{
+			Name: "AppError",
+			Inputs: []abi.Argument{
 				{
-					Type: "string",
+					Type: strT,
 				},
 			},
 		},
 		{
-			FunctionName: "InsufficientBalance",
-			Arguments: []*Argument{
+			Name: "InsufficientBalance",
+			Inputs: []abi.Argument{
 				{
-					Type: "uint256",
+					Type: uintT,
 				},
 				{
-					Type: "uint256",
+					Type: uintT,
 				},
 			},
 		},
 	}
 
-	erepo := NewErrorsRepository(customErrors)
+	erepo, err := NewErrorsRepository(customErrors)
+	require.NoError(t, err)
 	s, args, err := erepo.ParseError(
 		hexToBytes("0xcf47918100000000000000000000000000000000000000000000000000000000000000070000000000000000000000000000000000000000000000000000000000000009"),
 	)
