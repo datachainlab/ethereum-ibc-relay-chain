@@ -379,6 +379,10 @@ func (c *Chain) SendTx(opts *bind.TransactOpts, msg sdk.Msg, skipUpdateClientCom
 	return tx, err
 }
 
+type Artifact struct {
+	ABI []interface{} `json:"abi"`
+}
+
 func (c *Chain) GetRevertReason(receipt *client.Receipt) string {
 
 	var abiErrors []abi.Error
@@ -395,11 +399,21 @@ func (c *Chain) GetRevertReason(receipt *client.Receipt) string {
 				if err != nil {
 					return err
 				}
-				abiData, err := abi.JSON(strings.NewReader(string(data)))
+				var artifact Artifact
+				var abiData []byte
+				if err := json.Unmarshal(data, &artifact); err != nil {
+					abiData = data
+				} else {
+					abiData, err = json.Marshal(artifact.ABI)
+					if err != nil {
+						return err
+					}
+				}
+				abiABI, err := abi.JSON(strings.NewReader(string(abiData)))
 				if err != nil {
 					return err
 				}
-				for _, error := range abiData.Errors {
+				for _, error := range abiABI.Errors {
 					abiErrors = append(abiErrors, error)
 				}
 			}
