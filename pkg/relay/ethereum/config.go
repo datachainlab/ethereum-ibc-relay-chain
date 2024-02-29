@@ -4,9 +4,10 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"github.com/datachainlab/ethereum-ibc-relay-chain/pkg/utils"
 	"math/big"
 	"strings"
+
+	"github.com/datachainlab/ethereum-ibc-relay-chain/pkg/utils"
 
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
 	"github.com/ethereum/go-ethereum/common"
