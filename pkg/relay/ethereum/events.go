@@ -81,6 +81,9 @@ func (chain *Chain) findSentPackets(ctx core.QueryContext, fromHeight uint64) (c
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse SendPacket event: err=%v, log=%v", err, log)
 		}
+		if sendPacket.SourceChannel != chain.Path().ChannelID {
+			continue
+		}
 
 		packet := &core.PacketInfo{
 			Packet: channeltypes.NewPacket(
@@ -160,6 +163,9 @@ func (chain *Chain) findRecvPacketEvents(ctx core.QueryContext, fromHeight uint6
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse RecvPacket event: err=%v, log=%v", err, log)
 		}
+		if event.Packet.SourceChannel != chain.Path().ChannelID {
+			continue
+		}
 		events = append(events, event)
 	}
 
@@ -176,6 +182,9 @@ func (chain *Chain) findWriteAckEvents(ctx core.QueryContext, fromHeight uint64)
 		event, err := chain.ibcHandler.ParseWriteAcknowledgement(log)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse WriteAcknowledgement event: err=%v, log=%v", err, log)
+		}
+		if event.DestinationChannel != chain.Path().ChannelID {
+			continue
 		}
 		events = append(events, event)
 	}
