@@ -52,6 +52,7 @@ func (c *Chain) SendMsgs(msgs []sdk.Msg) ([]core.MsgID, error) {
 			logger.Error("failed to estimate gas", err)
 			if c.config.EnableDebugTrace {
 				revertReason, err := c.client.DebugTraceTransaction(ctx, tx.Hash())
+
 				logger.Error("debug trace transactio", err, "revert_reason", revertReason)
 			}
 			return nil, err
@@ -76,10 +77,13 @@ func (c *Chain) SendMsgs(msgs []sdk.Msg) ([]core.MsgID, error) {
 		if receipt.Status == gethtypes.ReceiptStatusFailed {
 			var revertReason string
 			if receipt.HasRevertReason() {
-				revertReason = GetRevertReason(receipt, c.config.AbiPaths)
+				revertReason = GetRevertReason(receipt.RevertReason, c.config.AbiPaths)
 			} else if c.config.EnableDebugTrace {
 				revertReason, err = c.client.DebugTraceTransaction(ctx, tx.Hash())
-				logger.Error("debug trace transaction", err, "revert_reason", revertReason)
+				if err != nil {
+					logger.Error("debug trace transaction", err, "revert_reason", revertReason)
+				}
+				revertReason = GetRevertReason([]byte(revertReason), c.config.AbiPaths)
 			}
 			err = fmt.Errorf("revert_reason=%s", revertReason)
 			logger.Error("tx execution failed", err, "msg_index", i)
@@ -112,10 +116,13 @@ func (c *Chain) GetMsgResult(id core.MsgID) (core.MsgResult, error) {
 	}
 	var revertReason string
 	if receipt.HasRevertReason() {
-		revertReason = GetRevertReason(receipt, c.config.AbiPaths)
+		revertReason = GetRevertReason(receipt.RevertReason, c.config.AbiPaths)
 	} else if c.config.EnableDebugTrace {
 		revertReason, err = c.client.DebugTraceTransaction(ctx, txHash)
-		logger.Error("debug trace transaction", err, "revert_reason", revertReason)
+		if err != nil {
+			logger.Error("debug trace transaction", err, "revert_reason", revertReason)
+		}
+		revertReason = GetRevertReason([]byte(revertReason), c.config.AbiPaths)
 	}
 	return c.makeMsgResultFromReceipt(&receipt.Receipt, revertReason)
 }

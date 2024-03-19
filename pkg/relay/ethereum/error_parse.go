@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/datachainlab/ethereum-ibc-relay-chain/pkg/client"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 )
 
@@ -145,14 +144,14 @@ func defaultErrors() ([]abi.Error, error) {
 	return errors, nil
 }
 
-func GetRevertReason(receipt *client.Receipt, abiPaths []string) string {
+func GetRevertReason(revertReason []byte, abiPaths []string) string {
 	erepo, err := GetErepo(abiPaths)
 	if err != nil {
 		return fmt.Sprintf("GetErepo err=%v", err)
 	}
-	sig, args, err := erepo.ParseError(receipt.RevertReason)
+	sig, args, err := erepo.ParseError(revertReason)
 	if err != nil {
-		return fmt.Sprintf("raw-revert-reason=\"%x\" parse-err=\"%v\"", receipt.RevertReason, err)
+		return fmt.Sprintf("raw-revert-reason=\"%x\" parse-err=\"%v\"", revertReason, err)
 	}
 	return fmt.Sprintf("revert-reason=\"%v\" args=\"%v\"", sig, args)
 }
