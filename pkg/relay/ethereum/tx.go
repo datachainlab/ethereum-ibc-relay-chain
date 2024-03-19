@@ -2,14 +2,9 @@ package ethereum
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	math "math"
-	"math/big"
-	"os"
-	"path/filepath"
-	"strings"
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/gogoproto/proto"
@@ -19,14 +14,10 @@ import (
 	"github.com/cosmos/ibc-go/v7/modules/core/exported"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/common/hexutil"
 	gethtypes "github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/hyperledger-labs/yui-relayer/core"
 	"github.com/hyperledger-labs/yui-relayer/log"
 
-	"github.com/datachainlab/ethereum-ibc-relay-chain/pkg/client"
 	"github.com/datachainlab/ethereum-ibc-relay-chain/pkg/contract/ibchandler"
 )
 
@@ -60,11 +51,8 @@ func (c *Chain) SendMsgs(msgs []sdk.Msg) ([]core.MsgID, error) {
 		if err != nil {
 			logger.Error("failed to estimate gas", err)
 			if c.config.EnableDebugTrace {
-				revertReason, err := c.DebugTraceTransaction(ctx, tx.Hash())
-				if err != nil {
-					return nil, err
-				}
-				logger.Error("failed to call debug_traceTransaction", err, "revert_reason", revertReason)
+				revertReason, err := c.client.DebugTraceTransaction(ctx, tx.Hash())
+				logger.Error("debug trace transactio", err, "revert_reason", revertReason)
 			}
 			return nil, err
 		}
@@ -88,13 +76,10 @@ func (c *Chain) SendMsgs(msgs []sdk.Msg) ([]core.MsgID, error) {
 		if receipt.Status == gethtypes.ReceiptStatusFailed {
 			var revertReason string
 			if receipt.HasRevertReason() {
-				revertReason = c.GetRevertReason(receipt)
+				revertReason = GetRevertReason(receipt, c.config.AbiPaths)
 			} else if c.config.EnableDebugTrace {
-				revertReason, err = c.DebugTraceTransaction(ctx, tx.Hash())
-				if err != nil {
-					logger.Error("failed to call debug_traceTransaction", err)
-					return nil, err
-				}
+				revertReason, err = c.client.DebugTraceTransaction(ctx, tx.Hash())
+				logger.Error("debug trace transaction", err, "revert_reason", revertReason)
 			}
 			err = fmt.Errorf("revert_reason=%s", revertReason)
 			logger.Error("tx execution failed", err, "msg_index", i)
@@ -111,6 +96,7 @@ func (c *Chain) SendMsgs(msgs []sdk.Msg) ([]core.MsgID, error) {
 }
 
 func (c *Chain) GetMsgResult(id core.MsgID) (core.MsgResult, error) {
+	logger := c.GetChainLogger()
 	msgID, ok := id.(*MsgID)
 	if !ok {
 		return nil, fmt.Errorf("unexpected message id type: %T", id)
@@ -126,12 +112,10 @@ func (c *Chain) GetMsgResult(id core.MsgID) (core.MsgResult, error) {
 	}
 	var revertReason string
 	if receipt.HasRevertReason() {
-		revertReason = c.GetRevertReason(receipt)
+		revertReason = GetRevertReason(receipt, c.config.AbiPaths)
 	} else if c.config.EnableDebugTrace {
-		revertReason, err = c.DebugTraceTransaction(ctx, txHash)
-		if err != nil {
-			return nil, err
-		}
+		revertReason, err = c.client.DebugTraceTransaction(ctx, txHash)
+		logger.Error("debug trace transaction", err, "revert_reason", revertReason)
 	}
 	return c.makeMsgResultFromReceipt(&receipt.Receipt, revertReason)
 }
@@ -377,250 +361,4 @@ func (c *Chain) SendTx(opts *bind.TransactOpts, msg sdk.Msg, skipUpdateClientCom
 		panic("illegal msg type")
 	}
 	return tx, err
-}
-
-type Artifact struct {
-	ABI []interface{} `json:"abi"`
-}
-
-func (c *Chain) GetRevertReason(receipt *client.Receipt) string {
-
-	var abiErrors []abi.Error
-
-	abiPaths := c.config.AbiPaths
-
-	for _, dir := range abiPaths {
-		if err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
-			if err != nil {
-				return err
-			}
-			if !info.IsDir() && strings.HasSuffix(info.Name(), ".json") {
-				data, err := os.ReadFile(path)
-				if err != nil {
-					return err
-				}
-				var artifact Artifact
-				var abiData []byte
-				if err := json.Unmarshal(data, &artifact); err != nil {
-					abiData = data
-				} else {
-					abiData, err = json.Marshal(artifact.ABI)
-					if err != nil {
-						return err
-					}
-				}
-				abiABI, err := abi.JSON(strings.NewReader(string(abiData)))
-				if err != nil {
-					return err
-				}
-				for _, error := range abiABI.Errors {
-					abiErrors = append(abiErrors, error)
-				}
-			}
-			return nil
-		}); err != nil {
-			fmt.Printf("failed parsing abi files: %v\n", err)
-		}
-	}
-
-	erepo, err := NewErrorsRepository(abiErrors)
-	if err != nil {
-		return fmt.Sprintf("failed to create error repository: %v", err)
-	}
-
-	sig, args, err := erepo.ParseError(receipt.RevertReason)
-	if err != nil {
-		return fmt.Sprintf("raw-revert-reason=\"%x\" parse-err=\"%v\"", receipt.RevertReason, err)
-	}
-	return fmt.Sprintf("revert-reason=\"%v\" args=\"%v\"", sig, args)
-}
-
-func (c *Chain) DebugTraceTransaction(ctx context.Context, txHash common.Hash) (string, error) {
-	var result *callFrame
-	if err := c.client.Raw().CallContext(ctx, &result, "debug_traceTransaction", txHash, map[string]string{"tracer": "callTracer"}); err != nil {
-		return "", err
-	}
-	revertReason, err := searchRevertReason(result)
-	if err != nil {
-		return "", err
-	}
-	return revertReason, nil
-}
-
-type callLog struct {
-	Address common.Address `json:"address"`
-	Topics  []common.Hash  `json:"topics"`
-	Data    hexutil.Bytes  `json:"data"`
-}
-
-// see: https://github.com/ethereum/go-ethereum/blob/v1.12.0/eth/tracers/native/call.go#L44-L59
-type callFrame struct {
-	Type         vm.OpCode       `json:"-"`
-	From         common.Address  `json:"from"`
-	Gas          uint64          `json:"gas"`
-	GasUsed      uint64          `json:"gasUsed"`
-	To           *common.Address `json:"to,omitempty" rlp:"optional"`
-	Input        []byte          `json:"input" rlp:"optional"`
-	Output       []byte          `json:"output,omitempty" rlp:"optional"`
-	Error        string          `json:"error,omitempty" rlp:"optional"`
-	RevertReason string          `json:"revertReason,omitempty"`
-	Calls        []callFrame     `json:"calls,omitempty" rlp:"optional"`
-	Logs         []callLog       `json:"logs,omitempty" rlp:"optional"`
-	// Placed at end on purpose. The RLP will be decoded to 0 instead of
-	// nil if there are non-empty elements after in the struct.
-	Value *big.Int `json:"value,omitempty" rlp:"optional"`
-}
-
-// UnmarshalJSON unmarshals from JSON.
-func (c *callFrame) UnmarshalJSON(input []byte) error {
-	type callFrame0 struct {
-		Type         *vm.OpCode      `json:"-"`
-		From         *common.Address `json:"from"`
-		Gas          *hexutil.Uint64 `json:"gas"`
-		GasUsed      *hexutil.Uint64 `json:"gasUsed"`
-		To           *common.Address `json:"to,omitempty" rlp:"optional"`
-		Input        *hexutil.Bytes  `json:"input" rlp:"optional"`
-		Output       *hexutil.Bytes  `json:"output,omitempty" rlp:"optional"`
-		Error        *string         `json:"error,omitempty" rlp:"optional"`
-		RevertReason *string         `json:"revertReason,omitempty"`
-		Calls        []callFrame     `json:"calls,omitempty" rlp:"optional"`
-		Logs         []callLog       `json:"logs,omitempty" rlp:"optional"`
-		Value        *hexutil.Big    `json:"value,omitempty" rlp:"optional"`
-	}
-	var dec callFrame0
-	if err := json.Unmarshal(input, &dec); err != nil {
-		return err
-	}
-	if dec.Type != nil {
-		c.Type = *dec.Type
-	}
-	if dec.From != nil {
-		c.From = *dec.From
-	}
-	if dec.Gas != nil {
-		c.Gas = uint64(*dec.Gas)
-	}
-	if dec.GasUsed != nil {
-		c.GasUsed = uint64(*dec.GasUsed)
-	}
-	if dec.To != nil {
-		c.To = dec.To
-	}
-	if dec.Input != nil {
-		c.Input = *dec.Input
-	}
-	if dec.Output != nil {
-		c.Output = *dec.Output
-	}
-	if dec.Error != nil {
-		c.Error = *dec.Error
-	}
-	if dec.RevertReason != nil {
-		c.RevertReason = *dec.RevertReason
-	}
-	if dec.Calls != nil {
-		c.Calls = dec.Calls
-	}
-	if dec.Logs != nil {
-		c.Logs = dec.Logs
-	}
-	if dec.Value != nil {
-		c.Value = (*big.Int)(dec.Value)
-	}
-	return nil
-}
-
-func searchRevertReason(result *callFrame) (string, error) {
-	if result.RevertReason != "" {
-		return result.RevertReason, nil
-	}
-	for _, call := range result.Calls {
-		reason, err := searchRevertReason(&call)
-		if err == nil {
-			return reason, nil
-		}
-	}
-	return "", fmt.Errorf("revert reason not found")
-}
-
-type ErrorsRepository struct {
-	errs map[[4]byte]abi.Error
-}
-
-func NewErrorsRepository(customErrors []abi.Error) (*ErrorsRepository, error) {
-	defaultErrs, err := defaultErrors()
-	if err != nil {
-		return nil, err
-	}
-	customErrors = append(customErrors, defaultErrs...)
-	er := ErrorsRepository{
-		errs: make(map[[4]byte]abi.Error),
-	}
-	for _, e := range customErrors {
-		e := abi.NewError(e.Name, e.Inputs)
-		if err := er.Add(e); err != nil {
-			return nil, err
-		}
-	}
-	return &er, nil
-}
-
-func (r *ErrorsRepository) Add(e abi.Error) error {
-	var sel [4]byte
-	copy(sel[:], e.ID[:4])
-	if _, ok := r.errs[sel]; ok {
-		return fmt.Errorf("duplicate error selector: error=%v sel=%x", e.String(), sel)
-	}
-	r.errs[sel] = e
-	return nil
-}
-
-func (r *ErrorsRepository) GetError(sel [4]byte) (abi.Error, bool) {
-	e, ok := r.errs[sel]
-	return e, ok
-}
-
-func (r *ErrorsRepository) ParseError(bz []byte) (string, interface{}, error) {
-	if len(bz) < 4 {
-		return "", nil, fmt.Errorf("invalid error data: %v", bz)
-	}
-	var sel [4]byte
-	copy(sel[:], bz[:4])
-	e, ok := r.GetError(sel)
-	if !ok {
-		return "", nil, fmt.Errorf("unknown error: sel=%x", sel)
-	}
-	v, err := e.Unpack(bz)
-	return e.Sig, v, err
-}
-
-func defaultErrors() ([]abi.Error, error) {
-	strT, err := abi.NewType("string", "", nil)
-	if err != nil {
-		return nil, err
-	}
-	uintT, err := abi.NewType("uint256", "", nil)
-	if err != nil {
-		return nil, err
-	}
-
-	errors := []abi.Error{
-		{
-			Name: "Error",
-			Inputs: []abi.Argument{
-				{
-					Type: strT,
-				},
-			},
-		},
-		{
-			Name: "Panic",
-			Inputs: []abi.Argument{
-				{
-					Type: uintT,
-				},
-			},
-		},
-	}
-	return errors, nil
 }
