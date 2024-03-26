@@ -52,8 +52,11 @@ func (c *Chain) SendMsgs(msgs []sdk.Msg) ([]core.MsgID, error) {
 			logger.Error("failed to estimate gas", err)
 			if c.config.EnableDebugTrace {
 				revertReason, err := c.client.DebugTraceTransaction(ctx, tx.Hash())
-
-				logger.Error("debug trace transactio", err, "revert_reason", revertReason)
+				if err != nil {
+					logger.Error("debug trace transaction", err, "revert_reason", revertReason)
+				}
+				revertReason = GetRevertReason([]byte(revertReason), c.config.AbiPaths)
+				logger.Error("failed to estimate gas", err, "revert_reason", revertReason)
 			}
 			return nil, err
 		}

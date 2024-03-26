@@ -22,7 +22,7 @@ var erepo *ErrorsRepository
 
 func GetErepo(abiPaths []string) (*ErrorsRepository, error) {
 	var erepoErr error
-	if erepo != nil {
+	if erepo == nil {
 		erepo, erepoErr = CreateErepo(abiPaths)
 	}
 	return erepo, erepoErr
@@ -84,13 +84,16 @@ func NewErrorsRepository(customErrors []abi.Error) (*ErrorsRepository, error) {
 	return &er, nil
 }
 
-func (r *ErrorsRepository) Add(e abi.Error) error {
+func (r *ErrorsRepository) Add(e0 abi.Error) error {
 	var sel [4]byte
-	copy(sel[:], e.ID[:4])
-	if _, ok := r.errs[sel]; ok {
-		return fmt.Errorf("duplicate error selector: error=%v sel=%x", e.String(), sel)
+	copy(sel[:], e0.ID[:4])
+	if e1, ok := r.errs[sel]; ok {
+		if e1.Sig == e0.Sig {
+			return nil
+		}
+		return fmt.Errorf("error selector collision: sel=%x e0=%v e1=%v", sel, e0, e1)
 	}
-	r.errs[sel] = e
+	r.errs[sel] = e0
 	return nil
 }
 
