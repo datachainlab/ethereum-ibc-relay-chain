@@ -374,6 +374,7 @@ func (c *Chain) getRevertReasonFromReceipt(ctx context.Context, receipt *client.
 		} else if len(callFrame.Output) == 0 {
 			return "", fmt.Errorf("execution reverted without error data")
 		}
+		errorData = callFrame.Output
 	} else {
 		return "", fmt.Errorf("no way to get revert reason")
 	}
