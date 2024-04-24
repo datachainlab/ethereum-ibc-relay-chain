@@ -18,18 +18,18 @@ func CreateErrorRepository(abiPaths []string) (ErrorRepository, error) {
 	for _, dir := range abiPaths {
 		if err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 			if err != nil {
-				return err
+				return fmt.Errorf("error encountered during the file tree walk: err=%v, path=%s", err, path)
 			}
 			if !info.IsDir() && strings.HasSuffix(info.Name(), ".json") {
 				f, err := os.Open(path)
 				if err != nil {
-					return err
+					return fmt.Errorf("failed to open a file: err=%v, path=%s", err, path)
 				}
 				defer f.Close()
 
 				contractABI, err := abi.JSON(f)
 				if err != nil {
-					return err
+					return fmt.Errorf("failed to parse a ABI JSON file: err=%v, path=%s", err, path)
 				}
 
 				for _, errABI := range contractABI.Errors {
@@ -38,7 +38,7 @@ func CreateErrorRepository(abiPaths []string) (ErrorRepository, error) {
 			}
 			return nil
 		}); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to read ABIs from a directory: err=%v, dirpath=%s", err, dir)
 		}
 	}
 
