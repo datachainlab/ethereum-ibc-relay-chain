@@ -79,14 +79,21 @@ func (r ErrorRepository) Get(errorData []byte) (abi.Error, error) {
 }
 
 func errorToJSON(errVal interface{}, errABI abi.Error) (string, error) {
+	errVals, ok := errVal.([]interface{})
+	if !ok {
+		return "", fmt.Errorf("error value has unexpected type: expected=[]interface{}, actual=%T", errVal)
+	}
+
 	m := make(map[string]interface{})
-	for i, v := range errVal.([]interface{}) {
+	for i, v := range errVals {
 		m[errABI.Inputs[i].Name] = v
 	}
+
 	bz, err := json.Marshal(m)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to marshal error value: %v", err)
 	}
+
 	return string(bz), nil
 }
 

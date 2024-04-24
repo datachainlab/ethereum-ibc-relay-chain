@@ -391,8 +391,10 @@ func (c *Chain) getRevertReasonFromEstimateGas(err error) (string, error) {
 		return "", fmt.Errorf("eth_estimateGas failed with unexpected error type: errorType=%T", err)
 	} else if de.ErrorData() == nil {
 		return "", fmt.Errorf("eth_estimateGas failed without error data")
+	} else if errorData, ok := de.ErrorData().(string); !ok {
+		return "", fmt.Errorf("eth_estimateGas failed with unexpected error data type: errorDataType=%T", de.ErrorData())
 	} else {
-		errorData := common.FromHex(de.ErrorData().(string))
+		errorData := common.FromHex(errorData)
 		revertReason, err := c.errorRepository.ParseError(errorData)
 		if err != nil {
 			return "", fmt.Errorf("failed to parse error: %v", err)
