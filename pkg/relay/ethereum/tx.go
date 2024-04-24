@@ -14,10 +14,13 @@ import (
 	"github.com/cosmos/ibc-go/v7/modules/core/exported"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
+	"github.com/ethereum/go-ethereum/common"
 	gethtypes "github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/hyperledger-labs/yui-relayer/core"
 	"github.com/hyperledger-labs/yui-relayer/log"
 
+	"github.com/datachainlab/ethereum-ibc-relay-chain/pkg/client"
 	"github.com/datachainlab/ethereum-ibc-relay-chain/pkg/contract/ibchandler"
 )
 
@@ -49,15 +52,12 @@ func (c *Chain) SendMsgs(msgs []sdk.Msg) ([]core.MsgID, error) {
 		}
 		estimatedGas, err := c.client.EstimateGasFromTx(ctx, tx)
 		if err != nil {
-			logger.Error("failed to estimate gas", err)
-			if c.config.EnableDebugTrace {
-				revertReason, err := c.client.DebugTraceTransaction(ctx, tx.Hash())
-				if err != nil {
-					logger.Error("debug trace transaction", err, "revert_reason", revertReason)
-				}
-				revertReason = GetRevertReason([]byte(revertReason), c.config.AbiPaths)
-				logger.Error("failed to estimate gas", err, "revert_reason", revertReason)
+			revertReason, err2 := c.getRevertReasonFromEstimateGas(err)
+			if err2 != nil {
+				logger.Error("failed to get revert reason", err2, "msg_index", i)
 			}
+
+			logger.Error("failed to estimate gas", err, "revert_reason", revertReason, "msg_index", i)
 			return nil, err
 		}
 		txGasLimit := estimatedGas * c.Config().GasEstimateRate.Numerator / c.Config().GasEstimateRate.Denominator
@@ -78,18 +78,13 @@ func (c *Chain) SendMsgs(msgs []sdk.Msg) ([]core.MsgID, error) {
 			return nil, err
 		}
 		if receipt.Status == gethtypes.ReceiptStatusFailed {
-			var revertReason string
-			if receipt.HasRevertReason() {
-				revertReason = GetRevertReason(receipt.RevertReason, c.config.AbiPaths)
-			} else if c.config.EnableDebugTrace {
-				revertReason, err = c.client.DebugTraceTransaction(ctx, tx.Hash())
-				if err != nil {
-					logger.Error("debug trace transaction", err, "revert_reason", revertReason)
-				}
-				revertReason = GetRevertReason([]byte(revertReason), c.config.AbiPaths)
+			revertReason, err2 := c.getRevertReasonFromReceipt(ctx, receipt)
+			if err2 != nil {
+				logger.Error("failed to get revert reason", err2, "msg_index", i)
 			}
-			err = fmt.Errorf("revert_reason=%s", revertReason)
-			logger.Error("tx execution failed", err, "msg_index", i)
+
+			err := fmt.Errorf("tx execution reverted: revertReason=%s, msgIndex=%d", revertReason, i)
+			logger.Error("tx execution reverted", err, "revert_reason", revertReason, "msg_index", i)
 			return nil, err
 		}
 		if c.msgEventListener != nil {
@@ -104,6 +99,7 @@ func (c *Chain) SendMsgs(msgs []sdk.Msg) ([]core.MsgID, error) {
 
 func (c *Chain) GetMsgResult(id core.MsgID) (core.MsgResult, error) {
 	logger := c.GetChainLogger()
+
 	msgID, ok := id.(*MsgID)
 	if !ok {
 		return nil, fmt.Errorf("unexpected message id type: %T", id)
@@ -117,15 +113,9 @@ func (c *Chain) GetMsgResult(id core.MsgID) (core.MsgResult, error) {
 	if receipt.Status == gethtypes.ReceiptStatusSuccessful {
 		return c.makeMsgResultFromReceipt(&receipt.Receipt, "")
 	}
-	var revertReason string
-	if receipt.HasRevertReason() {
-		revertReason = GetRevertReason(receipt.RevertReason, c.config.AbiPaths)
-	} else if c.config.EnableDebugTrace {
-		revertReason, err = c.client.DebugTraceTransaction(ctx, txHash)
-		if err != nil {
-			logger.Error("debug trace transaction", err, "revert_reason", revertReason)
-		}
-		revertReason = GetRevertReason([]byte(revertReason), c.config.AbiPaths)
+	revertReason, err := c.getRevertReasonFromReceipt(ctx, receipt)
+	if err != nil {
+		logger.Error("failed to get revert reason", err)
 	}
 	return c.makeMsgResultFromReceipt(&receipt.Receipt, revertReason)
 }
@@ -371,4 +361,35 @@ func (c *Chain) SendTx(opts *bind.TransactOpts, msg sdk.Msg, skipUpdateClientCom
 		panic("illegal msg type")
 	}
 	return tx, err
+}
+
+func (c *Chain) getRevertReasonFromReceipt(ctx context.Context, receipt *client.Receipt) (string, error) {
+	var errorData []byte
+	if receipt.HasRevertReason() {
+		errorData = receipt.RevertReason
+	} else if c.config.EnableDebugTrace {
+		callFrame, err := c.client.DebugTraceTransaction(ctx, receipt.TxHash)
+		if err != nil {
+			return "", err
+		} else if len(callFrame.Output) == 0 {
+			return "", fmt.Errorf("execution reverted without error data")
+		}
+	} else {
+		return "", fmt.Errorf("no way to get revert reason")
+	}
+
+	revertReason := GetRevertReason(errorData, c.config.AbiPaths)
+	return revertReason, nil
+}
+
+func (c *Chain) getRevertReasonFromEstimateGas(err error) (string, error) {
+	if de, ok := err.(rpc.DataError); !ok {
+		return "", fmt.Errorf("eth_estimateGas failed with unexpected error type: errorType=%T", err)
+	} else if de.ErrorData() == nil {
+		return "", fmt.Errorf("eth_estimateGas failed without error data")
+	} else {
+		errorData := common.FromHex(de.ErrorData().(string))
+		revertReason := GetRevertReason(errorData, c.config.AbiPaths)
+		return revertReason, nil
+	}
 }

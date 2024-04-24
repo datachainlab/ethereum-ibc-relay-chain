@@ -3,7 +3,6 @@ package client
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"math/big"
 	"time"
 
@@ -93,6 +92,12 @@ func (cl *ETHClient) WaitForReceiptAndGet(ctx context.Context, txHash common.Has
 	return receipt, nil
 }
 
+func (cl *ETHClient) DebugTraceTransaction(ctx context.Context, txHash common.Hash) (CallFrame, error) {
+	var callFrame CallFrame
+	err := cl.Raw().CallContext(ctx, &callFrame, "debug_traceTransaction", txHash, map[string]string{"tracer": "callTracer"})
+	return callFrame, err
+}
+
 type Receipt struct {
 	gethtypes.Receipt
 	RevertReason []byte `json:"revertReason,omitempty"`
@@ -102,49 +107,14 @@ func (rc Receipt) HasRevertReason() bool {
 	return len(rc.RevertReason) > 0
 }
 
-func (cl *ETHClient) EstimateGasFromTx(ctx context.Context, tx *gethtypes.Transaction) (uint64, error) {
-	from, err := gethtypes.LatestSignerForChainID(tx.ChainId()).Sender(tx)
-	if err != nil {
-		return 0, err
-	}
-	to := tx.To()
-	value := tx.Value()
-	gasTipCap := tx.GasTipCap()
-	gasFeeCap := tx.GasFeeCap()
-	gasPrice := tx.GasPrice()
-	data := tx.Data()
-	accessList := tx.AccessList()
-	callMsg := ethereum.CallMsg{
-		From:       from,
-		To:         to,
-		GasPrice:   gasPrice,
-		GasTipCap:  gasTipCap,
-		GasFeeCap:  gasFeeCap,
-		Value:      value,
-		Data:       data,
-		AccessList: accessList,
-	}
-	estimatedGas, err := cl.EstimateGas(ctx, callMsg)
-	if err != nil {
-		return 0, err
-	}
-	return estimatedGas, nil
-}
-
-func (cl *ETHClient) DebugTraceTransaction(ctx context.Context, txHash common.Hash) (string, error) {
-	var result *callFrame
-	if err := cl.Raw().CallContext(ctx, &result, "debug_traceTransaction", txHash, map[string]string{"tracer": "callTracer"}); err != nil {
-		return "", err
-	}
-	revertReason, err := searchRevertReason(result)
-	if err != nil {
-		return "", err
-	}
-	return revertReason, nil
+type CallLog struct {
+	Address common.Address `json:"address"`
+	Topics  []common.Hash  `json:"topics"`
+	Data    hexutil.Bytes  `json:"data"`
 }
 
 // see: https://github.com/ethereum/go-ethereum/blob/v1.12.0/eth/tracers/native/call.go#L44-L59
-type callFrame struct {
+type CallFrame struct {
 	Type         vm.OpCode       `json:"-"`
 	From         common.Address  `json:"from"`
 	Gas          uint64          `json:"gas"`
@@ -154,21 +124,15 @@ type callFrame struct {
 	Output       []byte          `json:"output,omitempty" rlp:"optional"`
 	Error        string          `json:"error,omitempty" rlp:"optional"`
 	RevertReason string          `json:"revertReason,omitempty"`
-	Calls        []callFrame     `json:"calls,omitempty" rlp:"optional"`
-	Logs         []callLog       `json:"logs,omitempty" rlp:"optional"`
+	Calls        []CallFrame     `json:"calls,omitempty" rlp:"optional"`
+	Logs         []CallLog       `json:"logs,omitempty" rlp:"optional"`
 	// Placed at end on purpose. The RLP will be decoded to 0 instead of
 	// nil if there are non-empty elements after in the struct.
 	Value *big.Int `json:"value,omitempty" rlp:"optional"`
 }
 
-type callLog struct {
-	Address common.Address `json:"address"`
-	Topics  []common.Hash  `json:"topics"`
-	Data    hexutil.Bytes  `json:"data"`
-}
-
 // UnmarshalJSON unmarshals from JSON.
-func (c *callFrame) UnmarshalJSON(input []byte) error {
+func (c *CallFrame) UnmarshalJSON(input []byte) error {
 	type callFrame0 struct {
 		Type         *vm.OpCode      `json:"-"`
 		From         *common.Address `json:"from"`
@@ -179,8 +143,8 @@ func (c *callFrame) UnmarshalJSON(input []byte) error {
 		Output       *hexutil.Bytes  `json:"output,omitempty" rlp:"optional"`
 		Error        *string         `json:"error,omitempty" rlp:"optional"`
 		RevertReason *string         `json:"revertReason,omitempty"`
-		Calls        []callFrame     `json:"calls,omitempty" rlp:"optional"`
-		Logs         []callLog       `json:"logs,omitempty" rlp:"optional"`
+		Calls        []CallFrame     `json:"calls,omitempty" rlp:"optional"`
+		Logs         []CallLog       `json:"logs,omitempty" rlp:"optional"`
 		Value        *hexutil.Big    `json:"value,omitempty" rlp:"optional"`
 	}
 	var dec callFrame0
@@ -226,15 +190,31 @@ func (c *callFrame) UnmarshalJSON(input []byte) error {
 	return nil
 }
 
-func searchRevertReason(result *callFrame) (string, error) {
-	if result.RevertReason != "" {
-		return result.RevertReason, nil
+func (cl *ETHClient) EstimateGasFromTx(ctx context.Context, tx *gethtypes.Transaction) (uint64, error) {
+	from, err := gethtypes.LatestSignerForChainID(tx.ChainId()).Sender(tx)
+	if err != nil {
+		return 0, err
 	}
-	for _, call := range result.Calls {
-		reason, err := searchRevertReason(&call)
-		if err == nil {
-			return reason, nil
-		}
+	to := tx.To()
+	value := tx.Value()
+	gasTipCap := tx.GasTipCap()
+	gasFeeCap := tx.GasFeeCap()
+	gasPrice := tx.GasPrice()
+	data := tx.Data()
+	accessList := tx.AccessList()
+	callMsg := ethereum.CallMsg{
+		From:       from,
+		To:         to,
+		GasPrice:   gasPrice,
+		GasTipCap:  gasTipCap,
+		GasFeeCap:  gasFeeCap,
+		Value:      value,
+		Data:       data,
+		AccessList: accessList,
 	}
-	return "", fmt.Errorf("revert reason not found")
+	estimatedGas, err := cl.EstimateGas(ctx, callMsg)
+	if err != nil {
+		return 0, err
+	}
+	return estimatedGas, nil
 }
