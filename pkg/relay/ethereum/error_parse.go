@@ -1,7 +1,6 @@
 package ethereum
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -22,14 +21,19 @@ func CreateErrorRepository(abiPaths []string) (ErrorRepository, error) {
 				return err
 			}
 			if !info.IsDir() && strings.HasSuffix(info.Name(), ".json") {
-				data, err := os.ReadFile(path)
+				f, err := os.Open(path)
+				if err != nil {
+					return err
+				}
+				defer f.Close()
+
+				contractABI, err := abi.JSON(f)
 				if err != nil {
 					return err
 				}
 
-				contractABI, err := abi.JSON(bytes.NewReader(data))
-				for _, error := range contractABI.Errors {
-					errABIs = append(errABIs, error)
+				for _, errABI := range contractABI.Errors {
+					errABIs = append(errABIs, errABI)
 				}
 			}
 			return nil
