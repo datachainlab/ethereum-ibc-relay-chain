@@ -378,7 +378,10 @@ func (c *Chain) getRevertReasonFromReceipt(ctx context.Context, receipt *client.
 		return "", fmt.Errorf("no way to get revert reason")
 	}
 
-	revertReason := GetRevertReason(errorData, c.config.AbiPaths)
+	revertReason, err := c.errorRepository.ParseError(errorData)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse error: %v", err)
+	}
 	return revertReason, nil
 }
 
@@ -389,7 +392,10 @@ func (c *Chain) getRevertReasonFromEstimateGas(err error) (string, error) {
 		return "", fmt.Errorf("eth_estimateGas failed without error data")
 	} else {
 		errorData := common.FromHex(de.ErrorData().(string))
-		revertReason := GetRevertReason(errorData, c.config.AbiPaths)
+		revertReason, err := c.errorRepository.ParseError(errorData)
+		if err != nil {
+			return "", fmt.Errorf("failed to parse error: %v", err)
+		}
 		return revertReason, nil
 	}
 }

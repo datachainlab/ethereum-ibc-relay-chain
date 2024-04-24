@@ -1,6 +1,7 @@
 package ethereum
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -10,26 +11,11 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi"
 )
 
-type Artifact struct {
-	ABI []interface{} `json:"abi"`
-}
+type ErrorRepository map[[4]byte]abi.Error
 
-type ErrorsRepository struct {
-	errs map[[4]byte]abi.Error
-}
+func CreateErrorRepository(abiPaths []string) (ErrorRepository, error) {
+	var errABIs []abi.Error
 
-var erepo *ErrorsRepository
-
-func GetErepo(abiPaths []string) (*ErrorsRepository, error) {
-	var erepoErr error
-	if erepo == nil {
-		erepo, erepoErr = CreateErepo(abiPaths)
-	}
-	return erepo, erepoErr
-}
-
-func CreateErepo(abiPaths []string) (*ErrorsRepository, error) {
-	var abiErrors []abi.Error
 	for _, dir := range abiPaths {
 		if err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 			if err != nil {
@@ -40,22 +26,10 @@ func CreateErepo(abiPaths []string) (*ErrorsRepository, error) {
 				if err != nil {
 					return err
 				}
-				var artifact Artifact
-				var abiData []byte
-				if err := json.Unmarshal(data, &artifact); err != nil {
-					abiData = data
-				} else {
-					abiData, err = json.Marshal(artifact.ABI)
-					if err != nil {
-						return err
-					}
-				}
-				abiABI, err := abi.JSON(strings.NewReader(string(abiData)))
-				if err != nil {
-					return err
-				}
-				for _, error := range abiABI.Errors {
-					abiErrors = append(abiErrors, error)
+
+				contractABI, err := abi.JSON(bytes.NewReader(data))
+				for _, error := range contractABI.Errors {
+					errABIs = append(errABIs, error)
 				}
 			}
 			return nil
@@ -63,98 +37,77 @@ func CreateErepo(abiPaths []string) (*ErrorsRepository, error) {
 			return nil, err
 		}
 	}
-	return NewErrorsRepository(abiErrors)
+
+	return NewErrorRepository(errABIs)
 }
 
-func NewErrorsRepository(customErrors []abi.Error) (*ErrorsRepository, error) {
-	defaultErrs, err := defaultErrors()
-	if err != nil {
-		return nil, err
-	}
-	customErrors = append(customErrors, defaultErrs...)
-	er := ErrorsRepository{
-		errs: make(map[[4]byte]abi.Error),
-	}
-	for _, e := range customErrors {
-		e := abi.NewError(e.Name, e.Inputs)
-		if err := er.Add(e); err != nil {
+func NewErrorRepository(errABIs []abi.Error) (ErrorRepository, error) {
+	repo := make(ErrorRepository)
+	for _, errABI := range errABIs {
+		if err := repo.Add(errABI); err != nil {
 			return nil, err
 		}
 	}
-	return &er, nil
+
+	return repo, nil
 }
 
-func (r *ErrorsRepository) Add(e0 abi.Error) error {
+func (r ErrorRepository) Add(errABI abi.Error) error {
 	var sel [4]byte
-	copy(sel[:], e0.ID[:4])
-	if e1, ok := r.errs[sel]; ok {
-		if e1.Sig == e0.Sig {
+	copy(sel[:], errABI.ID[:4])
+	if existingErrABI, ok := r[sel]; ok {
+		if existingErrABI.Sig == errABI.Sig {
 			return nil
 		}
-		return fmt.Errorf("error selector collision: sel=%x e0=%v e1=%v", sel, e0, e1)
+		return fmt.Errorf("error selector collision: selector=%x, newErrABI=%v, existingErrABI=%v", sel, errABI, existingErrABI)
 	}
-	r.errs[sel] = e0
+	r[sel] = errABI
 	return nil
 }
 
-func (r *ErrorsRepository) GetError(sel [4]byte) (abi.Error, bool) {
-	e, ok := r.errs[sel]
-	return e, ok
-}
-
-func (r *ErrorsRepository) ParseError(bz []byte) (string, interface{}, error) {
-	if len(bz) < 4 {
-		return "", nil, fmt.Errorf("invalid error data: %v", bz)
+func (r ErrorRepository) Get(errorData []byte) (abi.Error, error) {
+	if len(errorData) < 4 {
+		return abi.Error{}, fmt.Errorf("the size of error data is less than 4 bytes: errorData=%x", errorData)
 	}
 	var sel [4]byte
-	copy(sel[:], bz[:4])
-	e, ok := r.GetError(sel)
+	copy(sel[:], errorData[:4])
+	errABI, ok := r[sel]
 	if !ok {
-		return "", nil, fmt.Errorf("unknown error: sel=%x", sel)
+		return abi.Error{}, fmt.Errorf("error ABI not found")
 	}
-	v, err := e.Unpack(bz)
-	return e.Sig, v, err
+	return errABI, nil
 }
 
-func defaultErrors() ([]abi.Error, error) {
-	strT, err := abi.NewType("string", "", nil)
+func errorToJSON(errVal interface{}, errABI abi.Error) (string, error) {
+	m := make(map[string]interface{})
+	for i, v := range errVal.([]interface{}) {
+		m[errABI.Inputs[i].Name] = v
+	}
+	bz, err := json.Marshal(m)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
-	uintT, err := abi.NewType("uint256", "", nil)
-	if err != nil {
-		return nil, err
-	}
-
-	errors := []abi.Error{
-		{
-			Name: "Error",
-			Inputs: []abi.Argument{
-				{
-					Type: strT,
-				},
-			},
-		},
-		{
-			Name: "Panic",
-			Inputs: []abi.Argument{
-				{
-					Type: uintT,
-				},
-			},
-		},
-	}
-	return errors, nil
+	return string(bz), nil
 }
 
-func GetRevertReason(revertReason []byte, abiPaths []string) string {
-	erepo, err := GetErepo(abiPaths)
-	if err != nil {
-		return fmt.Sprintf("GetErepo err=%v", err)
+func (r ErrorRepository) ParseError(errorData []byte) (string, error) {
+	// handle Error(string) and Panic(uint256)
+	if revertReason, err := abi.UnpackRevert(errorData); err == nil {
+		return revertReason, nil
 	}
-	sig, args, err := erepo.ParseError(revertReason)
+
+	// handle custom error
+	errABI, err := r.Get(errorData)
 	if err != nil {
-		return fmt.Sprintf("raw-revert-reason=\"%x\" parse-err=\"%v\"", revertReason, err)
+		return "", fmt.Errorf("failed to find error ABI: %v", err)
 	}
-	return fmt.Sprintf("revert-reason=\"%v\" args=\"%v\"", sig, args)
+	errVal, err := errABI.Unpack(errorData)
+	if err != nil {
+		return "", fmt.Errorf("failed to unpack error: %v", err)
+	}
+	errStr, err := errorToJSON(errVal, errABI)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal error inputs into JSON: %v", err)
+	}
+	return fmt.Sprintf("%s%s", errABI.Name, errStr), nil
 }
