@@ -47,7 +47,7 @@ func (c *Chain) SendMsgs(msgs []sdk.Msg) ([]core.MsgID, error) {
 		opts.NoSend = true
 		tx, err = c.SendTx(opts, msg, skipUpdateClientCommitment)
 		if err != nil {
-			logger.Error("failed to send msg / NoSend: true", err)
+			logger.Error("failed to send msg / NoSend: true", err, "msg_index", i)
 			return nil, err
 		}
 		estimatedGas, err := c.client.EstimateGasFromTx(ctx, tx)
@@ -62,19 +62,19 @@ func (c *Chain) SendMsgs(msgs []sdk.Msg) ([]core.MsgID, error) {
 		}
 		txGasLimit := estimatedGas * c.Config().GasEstimateRate.Numerator / c.Config().GasEstimateRate.Denominator
 		if txGasLimit > c.Config().MaxGasLimit {
-			logger.Warn("estimated gas exceeds max gas limit", "estimated_gas", txGasLimit, "max_gas_limit", c.Config().MaxGasLimit)
+			logger.Warn("estimated gas exceeds max gas limit", "estimated_gas", txGasLimit, "max_gas_limit", c.Config().MaxGasLimit, "msg_index", i)
 			txGasLimit = c.Config().MaxGasLimit
 		}
 		opts.GasLimit = txGasLimit
 		opts.NoSend = false
 		tx, err = c.SendTx(opts, msg, skipUpdateClientCommitment)
 		if err != nil {
-			logger.Error("failed to send msg / NoSend: false", err)
+			logger.Error("failed to send msg / NoSend: false", err, "msg_index", i)
 			return nil, err
 		}
 		receipt, err := c.client.WaitForReceiptAndGet(ctx, tx.Hash())
 		if err != nil {
-			logger.Error("failed to get receipt", err)
+			logger.Error("failed to get receipt", err, "msg_index", i)
 			return nil, err
 		}
 		if receipt.Status == gethtypes.ReceiptStatusFailed {
@@ -89,7 +89,7 @@ func (c *Chain) SendMsgs(msgs []sdk.Msg) ([]core.MsgID, error) {
 		}
 		if c.msgEventListener != nil {
 			if err := c.msgEventListener.OnSentMsg([]sdk.Msg{msg}); err != nil {
-				logger.Error("failed to OnSendMsg call", err)
+				logger.Error("failed to OnSendMsg call", err, "msg_index", i)
 			}
 		}
 		msgIDs = append(msgIDs, NewMsgID(tx.Hash()))
