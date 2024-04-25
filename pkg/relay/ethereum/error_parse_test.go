@@ -18,7 +18,7 @@ func TestRevertReasonParserDefault(t *testing.T) {
 		common.FromHex("0x08c379a00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000001a4e6f7420656e6f7567682045746865722070726f76696465642e000000000000"),
 	)
 	require.NoError(t, err)
-	require.Equal(t, "Not enough Ether provided.", revertReason)
+	require.Equal(t, `Error{"desc":"Not enough Ether provided."}`, revertReason)
 }
 
 func TestRevertReasonParserAddedCustomError(t *testing.T) {
@@ -37,7 +37,7 @@ func TestRevertReasonParserAddedCustomError(t *testing.T) {
 		common.FromHex("0x08c379a00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000001a4e6f7420656e6f7567682045746865722070726f76696465642e000000000000"),
 	)
 	require.NoError(t, err)
-	require.Equal(t, "Not enough Ether provided.", revertReason)
+	require.Equal(t, `Error{"desc":"Not enough Ether provided."}`, revertReason)
 }
 
 func TestRevertReasonParserCustomError(t *testing.T) {

@@ -12,6 +12,22 @@ import (
 
 type ErrorRepository map[[4]byte]abi.Error
 
+func defaultErrorABIs() ([]abi.Error, error) {
+	strT, err := abi.NewType("string", "", nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create string type: %v", err)
+	}
+	uintT, err := abi.NewType("uint256", "", nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create uint256 type: %v", err)
+	}
+
+	return []abi.Error{
+		abi.NewError("Error", []abi.Argument{{Name: "desc", Type: strT}}),
+		abi.NewError("Panic", []abi.Argument{{Name: "reason", Type: uintT}}),
+	}, nil
+}
+
 func CreateErrorRepository(abiPaths []string) (ErrorRepository, error) {
 	var errABIs []abi.Error
 
@@ -46,6 +62,13 @@ func CreateErrorRepository(abiPaths []string) (ErrorRepository, error) {
 }
 
 func NewErrorRepository(errABIs []abi.Error) (ErrorRepository, error) {
+	defaultErrABIs, err := defaultErrorABIs()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create default error ABIs: %v", err)
+	}
+
+	errABIs = append(errABIs, defaultErrABIs...)
+
 	repo := make(ErrorRepository)
 	for _, errABI := range errABIs {
 		if err := repo.Add(errABI); err != nil {
@@ -102,12 +125,6 @@ func errorToJSON(errVal interface{}, errABI abi.Error) (string, error) {
 }
 
 func (r ErrorRepository) ParseError(errorData []byte) (string, error) {
-	// handle Error(string) and Panic(uint256)
-	if revertReason, err := abi.UnpackRevert(errorData); err == nil {
-		return revertReason, nil
-	}
-
-	// handle custom error
 	errABI, err := r.Get(errorData)
 	if err != nil {
 		return "", fmt.Errorf("failed to find error ABI: %v", err)
