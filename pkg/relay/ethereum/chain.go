@@ -85,6 +85,7 @@ func NewChain(config ChainConfig) (*Chain, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to create error repository: %v", err)
 	}
+
 	return &Chain{
 		config:  config,
 		client:  client,

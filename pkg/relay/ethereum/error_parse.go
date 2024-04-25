@@ -77,7 +77,7 @@ func (r ErrorRepository) Get(errorData []byte) (abi.Error, error) {
 	copy(sel[:], errorData[:4])
 	errABI, ok := r[sel]
 	if !ok {
-		return abi.Error{}, fmt.Errorf("error ABI not found")
+		return abi.Error{}, fmt.Errorf("error ABI not found: errorData=%x", errorData)
 	}
 	return errABI, nil
 }
