@@ -114,9 +114,9 @@ func (c *Chain) GetMsgResult(id core.MsgID) (core.MsgResult, error) {
 	if receipt.Status == gethtypes.ReceiptStatusSuccessful {
 		return c.makeMsgResultFromReceipt(&receipt.Receipt, "")
 	}
-	revertReason, _, err := c.getRevertReasonFromReceipt(ctx, receipt)
+	revertReason, rawErrorData, err := c.getRevertReasonFromReceipt(ctx, receipt)
 	if err != nil {
-		logger.Error("failed to get revert reason", err)
+		logger.Error("failed to get revert reason", err, "raw_error_data", hex.EncodeToString(rawErrorData))
 	}
 	return c.makeMsgResultFromReceipt(&receipt.Receipt, revertReason)
 }
