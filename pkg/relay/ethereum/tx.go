@@ -2,6 +2,7 @@ package ethereum
 
 import (
 	"context"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	math "math"
@@ -52,12 +53,12 @@ func (c *Chain) SendMsgs(msgs []sdk.Msg) ([]core.MsgID, error) {
 		}
 		estimatedGas, err := c.client.EstimateGasFromTx(ctx, tx)
 		if err != nil {
-			revertReason, err2 := c.getRevertReasonFromEstimateGas(err)
+			revertReason, rawErrorData, err2 := c.getRevertReasonFromEstimateGas(err)
 			if err2 != nil {
 				logger.Error("failed to get revert reason", err2, "msg_index", i)
 			}
 
-			logger.Error("failed to estimate gas", err, "revert_reason", revertReason, "msg_index", i)
+			logger.Error("failed to estimate gas", err, "revert_reason", revertReason, "raw_error_data", hex.EncodeToString(rawErrorData), "msg_index", i)
 			return nil, err
 		}
 		txGasLimit := estimatedGas * c.Config().GasEstimateRate.Numerator / c.Config().GasEstimateRate.Denominator
@@ -74,22 +75,22 @@ func (c *Chain) SendMsgs(msgs []sdk.Msg) ([]core.MsgID, error) {
 		}
 		receipt, err := c.client.WaitForReceiptAndGet(ctx, tx.Hash())
 		if err != nil {
-			logger.Error("failed to get receipt", err, "msg_index", i)
+			logger.Error("failed to get receipt", err, "msg_index", i, "tx_hash", tx.Hash())
 			return nil, err
 		}
 		if receipt.Status == gethtypes.ReceiptStatusFailed {
-			revertReason, err2 := c.getRevertReasonFromReceipt(ctx, receipt)
+			revertReason, rawErrorData, err2 := c.getRevertReasonFromReceipt(ctx, receipt)
 			if err2 != nil {
-				logger.Error("failed to get revert reason", err2, "msg_index", i)
+				logger.Error("failed to get revert reason", err2, "msg_index", i, "tx_hash", tx.Hash())
 			}
 
-			err := fmt.Errorf("tx execution reverted: revertReason=%s, msgIndex=%d", revertReason, i)
-			logger.Error("tx execution reverted", err, "revert_reason", revertReason, "msg_index", i)
+			err := fmt.Errorf("tx execution reverted: revertReason=%s, rawErrorData=%x, msgIndex=%d, txHash=%s", revertReason, rawErrorData, i, tx.Hash())
+			logger.Error("tx execution reverted", err, "revert_reason", revertReason, "raw_error_data", hex.EncodeToString(rawErrorData), "msg_index", i, "tx_hash", tx.Hash())
 			return nil, err
 		}
 		if c.msgEventListener != nil {
 			if err := c.msgEventListener.OnSentMsg([]sdk.Msg{msg}); err != nil {
-				logger.Error("failed to OnSendMsg call", err, "msg_index", i)
+				logger.Error("failed to OnSendMsg call", err, "msg_index", i, "tx_hash", tx.Hash())
 			}
 		}
 		msgIDs = append(msgIDs, NewMsgID(tx.Hash()))
@@ -113,7 +114,7 @@ func (c *Chain) GetMsgResult(id core.MsgID) (core.MsgResult, error) {
 	if receipt.Status == gethtypes.ReceiptStatusSuccessful {
 		return c.makeMsgResultFromReceipt(&receipt.Receipt, "")
 	}
-	revertReason, err := c.getRevertReasonFromReceipt(ctx, receipt)
+	revertReason, _, err := c.getRevertReasonFromReceipt(ctx, receipt)
 	if err != nil {
 		logger.Error("failed to get revert reason", err)
 	}
@@ -363,42 +364,42 @@ func (c *Chain) SendTx(opts *bind.TransactOpts, msg sdk.Msg, skipUpdateClientCom
 	return tx, err
 }
 
-func (c *Chain) getRevertReasonFromReceipt(ctx context.Context, receipt *client.Receipt) (string, error) {
+func (c *Chain) getRevertReasonFromReceipt(ctx context.Context, receipt *client.Receipt) (string, []byte, error) {
 	var errorData []byte
 	if receipt.HasRevertReason() {
 		errorData = receipt.RevertReason
 	} else if c.config.EnableDebugTrace {
 		callFrame, err := c.client.DebugTraceTransaction(ctx, receipt.TxHash)
 		if err != nil {
-			return "", err
+			return "", nil, err
 		} else if len(callFrame.Output) == 0 {
-			return "", fmt.Errorf("execution reverted without error data")
+			return "", nil, fmt.Errorf("execution reverted without error data")
 		}
 		errorData = callFrame.Output
 	} else {
-		return "", fmt.Errorf("no way to get revert reason")
+		return "", nil, fmt.Errorf("no way to get revert reason")
 	}
 
 	revertReason, err := c.errorRepository.ParseError(errorData)
 	if err != nil {
-		return "", fmt.Errorf("failed to parse error: %v", err)
+		return "", errorData, fmt.Errorf("failed to parse error: %v", err)
 	}
-	return revertReason, nil
+	return revertReason, errorData, nil
 }
 
-func (c *Chain) getRevertReasonFromEstimateGas(err error) (string, error) {
+func (c *Chain) getRevertReasonFromEstimateGas(err error) (string, []byte, error) {
 	if de, ok := err.(rpc.DataError); !ok {
-		return "", fmt.Errorf("eth_estimateGas failed with unexpected error type: errorType=%T", err)
+		return "", nil, fmt.Errorf("eth_estimateGas failed with unexpected error type: errorType=%T", err)
 	} else if de.ErrorData() == nil {
-		return "", fmt.Errorf("eth_estimateGas failed without error data")
+		return "", nil, fmt.Errorf("eth_estimateGas failed without error data")
 	} else if errorData, ok := de.ErrorData().(string); !ok {
-		return "", fmt.Errorf("eth_estimateGas failed with unexpected error data type: errorDataType=%T", de.ErrorData())
+		return "", nil, fmt.Errorf("eth_estimateGas failed with unexpected error data type: errorDataType=%T", de.ErrorData())
 	} else {
 		errorData := common.FromHex(errorData)
 		revertReason, err := c.errorRepository.ParseError(errorData)
 		if err != nil {
-			return "", fmt.Errorf("failed to parse error: %v", err)
+			return "", errorData, fmt.Errorf("failed to parse error: %v", err)
 		}
-		return revertReason, nil
+		return revertReason, errorData, nil
 	}
 }
