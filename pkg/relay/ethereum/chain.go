@@ -45,6 +45,8 @@ type Chain struct {
 
 	signer Signer
 
+	errorRepository ErrorRepository
+
 	// cache
 	connectionOpenedConfirmed bool
 	allowLCFunctions          *AllowLCFunctions
@@ -79,6 +81,11 @@ func NewChain(config ChainConfig) (*Chain, error) {
 			return nil, fmt.Errorf("failed to build allowLcFunctions: %v", err)
 		}
 	}
+	errorRepository, err := CreateErrorRepository(config.AbiPaths)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create error repository: %v", err)
+	}
+
 	return &Chain{
 		config:  config,
 		client:  client,
@@ -86,7 +93,10 @@ func NewChain(config ChainConfig) (*Chain, error) {
 
 		ibcHandler: ibcHandler,
 
-		signer:           signer,
+		signer: signer,
+
+		errorRepository: errorRepository,
+
 		allowLCFunctions: alfs,
 	}, nil
 }

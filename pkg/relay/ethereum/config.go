@@ -79,6 +79,11 @@ func (c ChainConfig) Validate() error {
 			}
 		}
 	}
+	for i, path := range c.AbiPaths {
+		if isEmpty(path) {
+			errs = append(errs, fmt.Errorf("config attribute \"abi_paths[%d]\" is empty", i))
+		}
+	}
 	return errors.Join(errs...)
 }
 
