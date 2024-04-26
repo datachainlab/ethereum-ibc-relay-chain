@@ -116,7 +116,7 @@ func (c *Chain) GetMsgResult(id core.MsgID) (core.MsgResult, error) {
 	}
 	revertReason, rawErrorData, err := c.getRevertReasonFromReceipt(ctx, receipt)
 	if err != nil {
-		logger.Error("failed to get revert reason", err, "raw_error_data", hex.EncodeToString(rawErrorData))
+		logger.Error("failed to get revert reason", err, "raw_error_data", hex.EncodeToString(rawErrorData), "tx_hash", msgID.TxHashHex)
 	}
 	return c.makeMsgResultFromReceipt(&receipt.Receipt, revertReason)
 }
