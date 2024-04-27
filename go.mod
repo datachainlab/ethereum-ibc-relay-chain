@@ -2,8 +2,6 @@ module github.com/datachainlab/ethereum-ibc-relay-chain
 
 go 1.21
 
-toolchain go1.22.2
-
 require (
 	github.com/avast/retry-go v3.0.0+incompatible
 	github.com/btcsuite/btcd v0.23.4
