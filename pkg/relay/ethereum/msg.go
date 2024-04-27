@@ -72,19 +72,19 @@ func (c *Chain) parseMsgEventLogs(logs []*types.Log) ([]core.MsgEventLog, error)
 			if err != nil {
 				return nil, fmt.Errorf("failed to parse GeneratedClientIdentifier event: logIndex=%d, log=%v", i, log)
 			}
-			event = &core.EventGenerateClientIdentifier{ID: ev.Arg0}
+			event = &core.EventGenerateClientIdentifier{ID: ev.ClientId}
 		case abiGeneratedConnectionIdentifier.ID:
 			ev, err := c.ibcHandler.ParseGeneratedConnectionIdentifier(*log)
 			if err != nil {
 				return nil, fmt.Errorf("failed to parse GeneratedConnectionIdentifier event: logIndex=%d, log=%v", i, log)
 			}
-			event = &core.EventGenerateConnectionIdentifier{ID: ev.Arg0}
+			event = &core.EventGenerateConnectionIdentifier{ID: ev.ConnectionId}
 		case abiGeneratedChannelIdentifier.ID:
 			ev, err := c.ibcHandler.ParseGeneratedChannelIdentifier(*log)
 			if err != nil {
 				return nil, fmt.Errorf("failed to parse GeneratedChannelIdentifier event: logIndex=%d, log=%v", i, log)
 			}
-			event = &core.EventGenerateChannelIdentifier{ID: ev.Arg0}
+			event = &core.EventGenerateChannelIdentifier{ID: ev.ChannelId}
 		case abiSendPacket.ID:
 			ev, err := c.ibcHandler.ParseSendPacket(*log)
 			if err != nil {

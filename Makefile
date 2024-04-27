@@ -1,5 +1,5 @@
 FORGE  ?= forge
-ABIGEN ?= docker run -v .:/workspace -w /workspace -it ethereum/client-go:alltools-v1.11.6 abigen
+ABIGEN ?= docker run -v .:/workspace -w /workspace -it ethereum/client-go:alltools-v1.14.0 abigen
 
 DOCKER := $(shell which docker)
 
