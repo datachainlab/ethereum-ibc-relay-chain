@@ -9,10 +9,10 @@ import (
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/gogoproto/proto"
-	clienttypes "github.com/cosmos/ibc-go/v7/modules/core/02-client/types"
-	conntypes "github.com/cosmos/ibc-go/v7/modules/core/03-connection/types"
-	chantypes "github.com/cosmos/ibc-go/v7/modules/core/04-channel/types"
-	"github.com/cosmos/ibc-go/v7/modules/core/exported"
+	clienttypes "github.com/cosmos/ibc-go/v8/modules/core/02-client/types"
+	conntypes "github.com/cosmos/ibc-go/v8/modules/core/03-connection/types"
+	chantypes "github.com/cosmos/ibc-go/v8/modules/core/04-channel/types"
+	"github.com/cosmos/ibc-go/v8/modules/core/exported"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
@@ -291,7 +291,7 @@ func (c *Chain) TxChannelOpenConfirm(opts *bind.TransactOpts, msg *chantypes.Msg
 
 func (c *Chain) TxRecvPacket(opts *bind.TransactOpts, msg *chantypes.MsgRecvPacket) (*gethtypes.Transaction, error) {
 	return c.ibcHandler.RecvPacket(opts, ibchandler.IIBCChannelRecvPacketMsgPacketRecv{
-		Packet: ibchandler.PacketData{
+		Packet: ibchandler.Packet{
 			Sequence:           msg.Packet.Sequence,
 			SourcePort:         msg.Packet.SourcePort,
 			SourceChannel:      msg.Packet.SourceChannel,
@@ -308,7 +308,7 @@ func (c *Chain) TxRecvPacket(opts *bind.TransactOpts, msg *chantypes.MsgRecvPack
 
 func (c *Chain) TxAcknowledgement(opts *bind.TransactOpts, msg *chantypes.MsgAcknowledgement) (*gethtypes.Transaction, error) {
 	return c.ibcHandler.AcknowledgePacket(opts, ibchandler.IIBCChannelAcknowledgePacketMsgPacketAcknowledgement{
-		Packet: ibchandler.PacketData{
+		Packet: ibchandler.Packet{
 			Sequence:           msg.Packet.Sequence,
 			SourcePort:         msg.Packet.SourcePort,
 			SourceChannel:      msg.Packet.SourceChannel,
