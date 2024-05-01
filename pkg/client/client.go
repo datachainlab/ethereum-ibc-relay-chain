@@ -195,26 +195,33 @@ func (cl *ETHClient) EstimateGasFromTx(ctx context.Context, tx *gethtypes.Transa
 	if err != nil {
 		return 0, err
 	}
-	to := tx.To()
-	value := tx.Value()
-	gasTipCap := tx.GasTipCap()
-	gasFeeCap := tx.GasFeeCap()
-	gasPrice := tx.GasPrice()
-	data := tx.Data()
-	accessList := tx.AccessList()
+
 	callMsg := ethereum.CallMsg{
-		From:       from,
-		To:         to,
-		GasPrice:   gasPrice,
-		GasTipCap:  gasTipCap,
-		GasFeeCap:  gasFeeCap,
-		Value:      value,
-		Data:       data,
-		AccessList: accessList,
+		From:  from,
+		To:    tx.To(),
+		Value: tx.Value(),
+		Data:  tx.Data(),
 	}
-	estimatedGas, err := cl.EstimateGas(ctx, callMsg)
-	if err != nil {
-		return 0, err
+
+	switch tx.Type() {
+	case gethtypes.BlobTxType:
+		callMsg.GasTipCap = tx.GasTipCap()
+		callMsg.GasFeeCap = tx.GasFeeCap()
+		callMsg.AccessList = tx.AccessList()
+		callMsg.BlobGasFeeCap = tx.BlobGasFeeCap()
+		callMsg.BlobHashes = tx.BlobHashes()
+	case gethtypes.DynamicFeeTxType:
+		callMsg.GasTipCap = tx.GasTipCap()
+		callMsg.GasFeeCap = tx.GasFeeCap()
+		callMsg.AccessList = tx.AccessList()
+	case gethtypes.AccessListTxType:
+		callMsg.GasPrice = tx.GasPrice()
+		callMsg.AccessList = tx.AccessList()
+	case gethtypes.LegacyTxType:
+		callMsg.GasPrice = tx.GasPrice()
+	default:
+		panic("unsupported tx type")
 	}
-	return estimatedGas, nil
+
+	return cl.EstimateGas(ctx, callMsg)
 }
