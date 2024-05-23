@@ -61,7 +61,10 @@ func (c *Chain) SendMsgs(msgs []sdk.Msg) ([]core.MsgID, error) {
 		if err != nil {
 			var revertReason, rawErrorData string
 			if reason, data, err := c.getRevertReasonFromEstimateGas(err); err != nil {
+				// Raw error data may be available even if revert reason isn't available.
+				rawErrorData = hex.EncodeToString(data)
 				logger.Error("failed to get revert reason", err,
+					logAttrRawErrorData, rawErrorData,
 					logAttrMsgIndex, i,
 					logAttrRawTxData, rawTxData,
 				)
@@ -119,7 +122,10 @@ func (c *Chain) SendMsgs(msgs []sdk.Msg) ([]core.MsgID, error) {
 		if receipt.Status == gethtypes.ReceiptStatusFailed {
 			var revertReason, rawErrorData string
 			if reason, data, err := c.getRevertReasonFromReceipt(ctx, receipt); err != nil {
+				// Raw error data may be available even if revert reason isn't available.
+				rawErrorData = hex.EncodeToString(data)
 				logger.Error("failed to get revert reason", err,
+					logAttrRawErrorData, rawErrorData,
 					logAttrMsgIndex, i,
 					logAttrTxHash, tx.Hash(),
 					logAttrRawTxData, rawTxData,
