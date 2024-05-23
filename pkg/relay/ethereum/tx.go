@@ -94,6 +94,10 @@ func (c *Chain) SendMsgs(msgs []sdk.Msg) ([]core.MsgID, error) {
 		opts.GasLimit = txGasLimit
 		opts.NoSend = false
 		tx, err = c.SendTx(opts, msg, skipUpdateClientCommitment)
+		if err != nil {
+			logger.Error("failed to send msg", err, logAttrMsgIndex, i)
+			return nil, err
+		}
 		if bz, err := tx.MarshalBinary(); err != nil {
 			logger.Error("failed to encode tx", err,
 				logAttrMsgIndex, i,
@@ -101,14 +105,6 @@ func (c *Chain) SendMsgs(msgs []sdk.Msg) ([]core.MsgID, error) {
 			)
 		} else {
 			rawTxData = hex.EncodeToString(bz)
-		}
-		if err != nil {
-			logger.Error("failed to send msg", err,
-				logAttrMsgIndex, i,
-				logAttrTxHash, tx.Hash(),
-				logAttrRawTxData, rawTxData,
-			)
-			return nil, err
 		}
 		receipt, err := c.client.WaitForReceiptAndGet(ctx, tx.Hash())
 		if err != nil {
