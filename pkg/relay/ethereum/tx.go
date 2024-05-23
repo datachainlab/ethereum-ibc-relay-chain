@@ -48,49 +48,121 @@ func (c *Chain) SendMsgs(msgs []sdk.Msg) ([]core.MsgID, error) {
 		opts.NoSend = true
 		tx, err = c.SendTx(opts, msg, skipUpdateClientCommitment)
 		if err != nil {
-			logger.Error("failed to send msg / NoSend: true", err, "msg_index", i)
+			logger.Error("failed to build tx for gas estimation", err, logAttrMsgIndex, i)
 			return nil, err
+		}
+		var rawTxData string
+		if bz, err := tx.MarshalBinary(); err != nil {
+			logger.Error("failed to encode tx", err, logAttrMsgIndex, i)
+		} else {
+			rawTxData = hex.EncodeToString(bz)
 		}
 		estimatedGas, err := c.client.EstimateGasFromTx(ctx, tx)
 		if err != nil {
-			revertReason, rawErrorData, err2 := c.getRevertReasonFromEstimateGas(err)
-			if err2 != nil {
-				logger.Error("failed to get revert reason", err2, "msg_index", i)
+			var revertReason, rawErrorData string
+			if reason, data, err := c.getRevertReasonFromEstimateGas(err); err != nil {
+				logger.Error("failed to get revert reason", err,
+					logAttrMsgIndex, i,
+					logAttrRawTxData, rawTxData,
+				)
+			} else {
+				revertReason = reason
+				rawErrorData = hex.EncodeToString(data)
 			}
 
-			logger.Error("failed to estimate gas", err, "revert_reason", revertReason, "raw_error_data", hex.EncodeToString(rawErrorData), "msg_index", i)
+			logger.Error("failed to estimate gas", err,
+				logAttrRevertReason, revertReason,
+				logAttrRawErrorData, rawErrorData,
+				logAttrMsgIndex, i,
+				logAttrRawTxData, rawTxData,
+			)
 			return nil, err
 		}
 		txGasLimit := estimatedGas * c.Config().GasEstimateRate.Numerator / c.Config().GasEstimateRate.Denominator
 		if txGasLimit > c.Config().MaxGasLimit {
-			logger.Warn("estimated gas exceeds max gas limit", "estimated_gas", txGasLimit, "max_gas_limit", c.Config().MaxGasLimit, "msg_index", i)
+			logger.Warn("estimated gas exceeds max gas limit",
+				logAttrEstimatedGas, txGasLimit,
+				logAttrMaxGasLimit, c.Config().MaxGasLimit,
+				logAttrMsgIndex, i,
+				logAttrRawTxData, rawTxData,
+			)
 			txGasLimit = c.Config().MaxGasLimit
 		}
 		opts.GasLimit = txGasLimit
 		opts.NoSend = false
 		tx, err = c.SendTx(opts, msg, skipUpdateClientCommitment)
+		if bz, err := tx.MarshalBinary(); err != nil {
+			logger.Error("failed to encode tx", err,
+				logAttrMsgIndex, i,
+				logAttrTxHash, tx.Hash(),
+			)
+		} else {
+			rawTxData = hex.EncodeToString(bz)
+		}
 		if err != nil {
-			logger.Error("failed to send msg / NoSend: false", err, "msg_index", i)
+			logger.Error("failed to send msg", err,
+				logAttrMsgIndex, i,
+				logAttrTxHash, tx.Hash(),
+				logAttrRawTxData, rawTxData,
+			)
 			return nil, err
 		}
 		receipt, err := c.client.WaitForReceiptAndGet(ctx, tx.Hash())
 		if err != nil {
-			logger.Error("failed to get receipt", err, "msg_index", i, "tx_hash", tx.Hash())
+			logger.Error("failed to get receipt", err,
+				logAttrMsgIndex, i,
+				logAttrTxHash, tx.Hash(),
+				logAttrRawTxData, rawTxData,
+			)
 			return nil, err
 		}
 		if receipt.Status == gethtypes.ReceiptStatusFailed {
-			revertReason, rawErrorData, err2 := c.getRevertReasonFromReceipt(ctx, receipt)
-			if err2 != nil {
-				logger.Error("failed to get revert reason", err2, "msg_index", i, "tx_hash", tx.Hash())
+			var revertReason, rawErrorData string
+			if reason, data, err := c.getRevertReasonFromReceipt(ctx, receipt); err != nil {
+				logger.Error("failed to get revert reason", err,
+					logAttrMsgIndex, i,
+					logAttrTxHash, tx.Hash(),
+					logAttrRawTxData, rawTxData,
+					logAttrBlockHash, receipt.BlockHash.Hex(),
+					logAttrBlockNumber, receipt.BlockNumber.Uint64(),
+					logAttrTxIndex, receipt.TransactionIndex,
+				)
+			} else {
+				revertReason = reason
+				rawErrorData = hex.EncodeToString(data)
 			}
 
 			err := fmt.Errorf("tx execution reverted: revertReason=%s, rawErrorData=%x, msgIndex=%d, txHash=%s", revertReason, rawErrorData, i, tx.Hash())
-			logger.Error("tx execution reverted", err, "revert_reason", revertReason, "raw_error_data", hex.EncodeToString(rawErrorData), "msg_index", i, "tx_hash", tx.Hash())
+			logger.Error("tx execution reverted", err,
+				logAttrRevertReason, revertReason,
+				logAttrRawErrorData, rawErrorData,
+				logAttrMsgIndex, i,
+				logAttrTxHash, tx.Hash(),
+				logAttrRawTxData, rawTxData,
+				logAttrBlockHash, receipt.BlockHash.Hex(),
+				logAttrBlockNumber, receipt.BlockNumber.Uint64(),
+				logAttrTxIndex, receipt.TransactionIndex,
+			)
 			return nil, err
 		}
+		logger.Info("successfully sent tx",
+			logAttrMsgIndex, i,
+			logAttrTxHash, tx.Hash(),
+			logAttrRawTxData, rawTxData,
+			logAttrBlockHash, receipt.BlockHash.Hex(),
+			logAttrBlockNumber, receipt.BlockNumber.Uint64(),
+			logAttrTxIndex, receipt.TransactionIndex,
+		)
 		if c.msgEventListener != nil {
 			if err := c.msgEventListener.OnSentMsg([]sdk.Msg{msg}); err != nil {
-				logger.Error("failed to OnSendMsg call", err, "msg_index", i, "tx_hash", tx.Hash())
+				logger.Error("failed to OnSendMsg call", err,
+					logAttrMsgIndex, i,
+					logAttrTxHash, tx.Hash(),
+					logAttrRawTxData, rawTxData,
+					logAttrBlockHash, receipt.BlockHash.Hex(),
+					logAttrBlockNumber, receipt.BlockNumber.Uint64(),
+					logAttrTxIndex, receipt.TransactionIndex,
+				)
 			}
 		}
 		msgIDs = append(msgIDs, NewMsgID(tx.Hash()))
@@ -116,7 +188,13 @@ func (c *Chain) GetMsgResult(id core.MsgID) (core.MsgResult, error) {
 	}
 	revertReason, rawErrorData, err := c.getRevertReasonFromReceipt(ctx, receipt)
 	if err != nil {
-		logger.Error("failed to get revert reason", err, "raw_error_data", hex.EncodeToString(rawErrorData), "tx_hash", msgID.TxHashHex)
+		logger.Error("failed to get revert reason", err,
+			logAttrRawErrorData, hex.EncodeToString(rawErrorData),
+			logAttrTxHash, msgID.TxHashHex,
+			logAttrBlockHash, receipt.BlockHash.Hex(),
+			logAttrBlockNumber, receipt.BlockNumber.Uint64(),
+			logAttrTxIndex, receipt.TransactionIndex,
+		)
 	}
 	return c.makeMsgResultFromReceipt(&receipt.Receipt, revertReason)
 }
