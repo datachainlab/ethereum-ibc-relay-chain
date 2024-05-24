@@ -36,7 +36,10 @@ func (c *Chain) SendMsgs(msgs []sdk.Msg) ([]core.MsgID, error) {
 	logger := c.GetChainLogger()
 	var msgIDs []core.MsgID
 	for i, msg := range msgs {
-		logger := &log.RelayLogger{Logger: logger.With(logAttrMsgIndex, i)}
+		logger := &log.RelayLogger{Logger: logger.With(
+			logAttrMsgIndex, i,
+			logAttrMsgType, fmt.Sprintf("%T", msg),
+		)}
 
 		opts, err := c.TxOpts(ctx)
 		if err != nil {

@@ -2,6 +2,7 @@ package ethereum
 
 const (
 	logAttrMsgIndex     = "msg_index"
+	logAttrMsgType      = "msg_type"
 	logAttrRevertReason = "revert_reason"
 	logAttrRawErrorData = "raw_error_data"
 	logAttrRawTxData    = "raw_tx_data"
