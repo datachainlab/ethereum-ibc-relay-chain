@@ -41,7 +41,7 @@ func (c *Chain) SendMsgs(msgs []sdk.Msg) ([]core.MsgID, error) {
 			logAttrMsgType, fmt.Sprintf("%T", msg),
 		)}
 
-		opts, err := c.TxOpts(ctx)
+		opts, err := c.TxOpts(ctx, true)
 		if err != nil {
 			return nil, err
 		}

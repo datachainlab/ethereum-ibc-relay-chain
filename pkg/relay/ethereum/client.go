@@ -18,13 +18,25 @@ func (chain *Chain) CallOpts(ctx context.Context, height int64) *bind.CallOpts {
 	return opts
 }
 
-func (chain *Chain) TxOpts(ctx context.Context) (*bind.TransactOpts, error) {
+func (chain *Chain) TxOpts(ctx context.Context, useLatestNonce bool) (*bind.TransactOpts, error) {
+	addr := chain.signer.Address()
+
 	txOpts := &bind.TransactOpts{
-		From:   chain.signer.Address(),
+		From:   addr,
 		Signer: chain.signer.Sign,
 	}
+
 	if err := NewGasFeeCalculator(chain.client, &chain.config).Apply(ctx, txOpts); err != nil {
 		return nil, err
 	}
+
+	if useLatestNonce {
+		if nonce, err := chain.client.NonceAt(ctx, addr, nil); err != nil {
+			return nil, err
+		} else {
+			txOpts.Nonce = new(big.Int).SetUint64(nonce)
+		}
+	}
+
 	return txOpts, nil
 }
