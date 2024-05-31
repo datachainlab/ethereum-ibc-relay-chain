@@ -43,7 +43,7 @@ type Chain struct {
 	client     *client.ETHClient
 	ibcHandler *ibchandler.Ibchandler
 
-	signer Signer
+	ethereumSigner EthereumSigner
 
 	errorRepository ErrorRepository
 
@@ -70,10 +70,15 @@ func NewChain(config ChainConfig) (*Chain, error) {
 	if err != nil {
 		return nil, err
 	}
-	signer, err := config.Signer.GetCachedValue().(SignerConfig).Build(big.NewInt(int64(config.EthChainId)))
+	signer, err := config.Signer.GetCachedValue().(core.SignerConfig).Build()
 	if err != nil {
 		return nil, fmt.Errorf("failed to build signer: %v", err)
 	}
+	ethereumSigner, err := NewEthereumSigner(signer, big.NewInt(int64(config.EthChainId)))
+	if err != nil {
+		return nil, fmt.Errorf("failed to build ethreum signer: %v", err)
+	}
+
 	var alfs *AllowLCFunctions
 	if config.AllowLcFunctions != nil {
 		alfs, err = config.AllowLcFunctions.ToAllowLCFunctions()
@@ -93,7 +98,7 @@ func NewChain(config ChainConfig) (*Chain, error) {
 
 		ibcHandler: ibcHandler,
 
-		signer: signer,
+		ethereumSigner: *ethereumSigner,
 
 		errorRepository: errorRepository,
 

@@ -2,8 +2,8 @@ package hd
 
 import (
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
-	"github.com/datachainlab/ethereum-ibc-relay-chain/pkg/relay/ethereum"
 	"github.com/hyperledger-labs/yui-relayer/config"
+	"github.com/hyperledger-labs/yui-relayer/core"
 	"github.com/spf13/cobra"
 )
 
@@ -21,7 +21,7 @@ func (Module) Name() string {
 // RegisterInterfaces registers the module interfaces to protobuf Any.
 func (Module) RegisterInterfaces(registry codectypes.InterfaceRegistry) {
 	registry.RegisterImplementations(
-		(*ethereum.SignerConfig)(nil),
+		(*core.SignerConfig)(nil),
 		&SignerConfig{},
 	)
 }

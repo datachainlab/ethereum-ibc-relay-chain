@@ -45,6 +45,7 @@ func (c *Chain) SendMsgs(msgs []sdk.Msg) ([]core.MsgID, error) {
 		if err != nil {
 			return nil, err
 		}
+		c.ethereumSigner.SetLogger(logger);
 
 		// gas estimation
 		{
