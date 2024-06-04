@@ -19,11 +19,17 @@ type EthereumSigner struct {
 }
 
 func NewEthereumSigner(bytesSigner core.Signer, chainID *big.Int) (*EthereumSigner, error) {
-	pubkey, err := bytesSigner.GetPublicKey()
+	pkbytes, err := bytesSigner.GetPublicKey()
 	if err != nil {
 		return nil, fmt.Errorf("fail to get public key")
 	}
-	addr := gethcrypto.PubkeyToAddress(pubkey)
+
+	pk, err := gethcrypto.DecompressPubkey(pkbytes)
+	if err != nil {
+		return nil, fmt.Errorf("fail to decompress public key")
+	}
+
+	addr := gethcrypto.PubkeyToAddress(*pk)
 
 	gethSigner := gethtypes.LatestSignerForChainID(chainID)
 
