@@ -5,20 +5,20 @@ import (
 	"math/big"
 
 	"github.com/hyperledger-labs/yui-relayer/log"
-	"github.com/hyperledger-labs/yui-relayer/core"
+	"github.com/hyperledger-labs/yui-relayer/signer"
 	"github.com/ethereum/go-ethereum/common"
 	gethcrypto "github.com/ethereum/go-ethereum/crypto"
 	gethtypes "github.com/ethereum/go-ethereum/core/types"
 )
 
 type EthereumSigner struct {
-	bytesSigner core.Signer
+	bytesSigner signer.Signer
 	gethSigner gethtypes.Signer
 	addressCache common.Address
 	logger *log.RelayLogger
 }
 
-func NewEthereumSigner(bytesSigner core.Signer, chainID *big.Int) (*EthereumSigner, error) {
+func NewEthereumSigner(bytesSigner signer.Signer, chainID *big.Int) (*EthereumSigner, error) {
 	pkbytes, err := bytesSigner.GetPublicKey()
 	if err != nil {
 		return nil, fmt.Errorf("fail to get public key")

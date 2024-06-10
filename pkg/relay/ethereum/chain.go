@@ -20,6 +20,7 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/hyperledger-labs/yui-relayer/core"
+	"github.com/hyperledger-labs/yui-relayer/signer"
 	"github.com/hyperledger-labs/yui-relayer/log"
 
 	"github.com/datachainlab/ethereum-ibc-relay-chain/pkg/client"
@@ -70,7 +71,7 @@ func NewChain(config ChainConfig) (*Chain, error) {
 	if err != nil {
 		return nil, err
 	}
-	signer, err := config.Signer.GetCachedValue().(core.SignerConfig).Build()
+	signer, err := config.Signer.GetCachedValue().(signer.SignerConfig).Build()
 	if err != nil {
 		return nil, fmt.Errorf("failed to build signer: %v", err)
 	}

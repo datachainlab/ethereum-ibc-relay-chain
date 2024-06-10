@@ -3,11 +3,11 @@ package hd
 import (
 	fmt "fmt"
 
-	"github.com/hyperledger-labs/yui-relayer/core"
+	"github.com/hyperledger-labs/yui-relayer/signer"
 	"github.com/datachainlab/ethereum-ibc-relay-chain/pkg/wallet"
 )
 
-var _ core.SignerConfig = (*SignerConfig)(nil)
+var _ signer.SignerConfig = (*SignerConfig)(nil)
 
 func (c *SignerConfig) Validate() error {
 	if _, err := wallet.GetPrvKeyFromMnemonicAndHDWPath(c.Mnemonic, c.Path); err != nil {
@@ -16,6 +16,6 @@ func (c *SignerConfig) Validate() error {
 	return nil
 }
 
-func (c *SignerConfig) Build() (core.Signer, error) {
+func (c *SignerConfig) Build() (signer.Signer, error) {
 	return NewSigner(c.Mnemonic, c.Path)
 }

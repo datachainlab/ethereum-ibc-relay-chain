@@ -3,7 +3,7 @@ package hd
 import (
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
 	"github.com/hyperledger-labs/yui-relayer/config"
-	"github.com/hyperledger-labs/yui-relayer/core"
+	"github.com/hyperledger-labs/yui-relayer/signer"
 	"github.com/spf13/cobra"
 )
 
@@ -21,7 +21,7 @@ func (Module) Name() string {
 // RegisterInterfaces registers the module interfaces to protobuf Any.
 func (Module) RegisterInterfaces(registry codectypes.InterfaceRegistry) {
 	registry.RegisterImplementations(
-		(*core.SignerConfig)(nil),
+		(*signer.SignerConfig)(nil),
 		&SignerConfig{},
 	)
 }

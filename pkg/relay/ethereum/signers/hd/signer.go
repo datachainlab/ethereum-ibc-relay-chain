@@ -4,12 +4,12 @@ import (
 	"crypto/ecdsa"
 	"fmt"
 
-	"github.com/hyperledger-labs/yui-relayer/core"
+	"github.com/hyperledger-labs/yui-relayer/signer"
 	"github.com/datachainlab/ethereum-ibc-relay-chain/pkg/wallet"
 	gethcrypto "github.com/ethereum/go-ethereum/crypto"
 )
 
-var _ core.Signer = (*Signer)(nil)
+var _ signer.Signer = (*Signer)(nil)
 
 type Signer struct {
 	key    *ecdsa.PrivateKey
