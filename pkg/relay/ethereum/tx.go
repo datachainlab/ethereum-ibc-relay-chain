@@ -35,65 +35,39 @@ func (c *Chain) SendMsgs(msgs []sdk.Msg) ([]core.MsgID, error) {
 	}
 	logger := c.GetChainLogger()
 	var msgIDs []core.MsgID
-	for i, msg := range msgs {
-		var (
-			tx  *gethtypes.Transaction
-			err error
-		)
-		opts, err := c.TxOpts(ctx)
-		if err != nil {
-			return nil, err
-		}
-		opts.GasLimit = math.MaxUint64
-		opts.NoSend = true
-		tx, err = c.SendTx(opts, msg, skipUpdateClientCommitment)
-		if err != nil {
-			logger.Error("failed to send msg / NoSend: true", err, "msg_index", i)
-			return nil, err
-		}
-		estimatedGas, err := c.client.EstimateGasFromTx(ctx, tx)
-		if err != nil {
-			revertReason, rawErrorData, err2 := c.getRevertReasonFromEstimateGas(err)
-			if err2 != nil {
-				logger.Error("failed to get revert reason", err2, "msg_index", i)
-			}
 
-			logger.Error("failed to estimate gas", err, "revert_reason", revertReason, "raw_error_data", hex.EncodeToString(rawErrorData), "msg_index", i)
-			return nil, err
-		}
-		txGasLimit := estimatedGas * c.Config().GasEstimateRate.Numerator / c.Config().GasEstimateRate.Denominator
-		if txGasLimit > c.Config().MaxGasLimit {
-			logger.Warn("estimated gas exceeds max gas limit", "estimated_gas", txGasLimit, "max_gas_limit", c.Config().MaxGasLimit, "msg_index", i)
-			txGasLimit = c.Config().MaxGasLimit
-		}
-		opts.GasLimit = txGasLimit
-		opts.NoSend = false
-		tx, err = c.SendTx(opts, msg, skipUpdateClientCommitment)
+	iter := NewMulticallIter(msgs, skipUpdateClientCommitment)
+	for !iter.IsEnd() {
+		tx, from, err := iter.SendMulticallTx(ctx, c)
 		if err != nil {
-			logger.Error("failed to send msg / NoSend: false", err, "msg_index", i)
 			return nil, err
 		}
+
 		receipt, err := c.client.WaitForReceiptAndGet(ctx, tx.Hash())
 		if err != nil {
-			logger.Error("failed to get receipt", err, "msg_index", i, "tx_hash", tx.Hash())
+			logger.Error("failed to get receipt", err, "msg_index.from", from, "msg_index.to", iter.Cursor(), "tx_hash", tx.Hash())
 			return nil, err
 		}
 		if receipt.Status == gethtypes.ReceiptStatusFailed {
 			revertReason, rawErrorData, err2 := c.getRevertReasonFromReceipt(ctx, receipt)
 			if err2 != nil {
-				logger.Error("failed to get revert reason", err2, "msg_index", i, "tx_hash", tx.Hash())
+				logger.Error("failed to get revert reason", err2, "msg_index.from", from, "msg_index.to", iter.Cursor(), "tx_hash", tx.Hash())
 			}
 
-			err := fmt.Errorf("tx execution reverted: revertReason=%s, rawErrorData=%x, msgIndex=%d, txHash=%s", revertReason, rawErrorData, i, tx.Hash())
-			logger.Error("tx execution reverted", err, "revert_reason", revertReason, "raw_error_data", hex.EncodeToString(rawErrorData), "msg_index", i, "tx_hash", tx.Hash())
+			err := fmt.Errorf("tx execution reverted: revertReason=%s, rawErrorData=%x, msgIndex.from=%d, msgIndex.to=%d, txHash=%s", revertReason, rawErrorData, from, iter.Cursor(), tx.Hash())
+			logger.Error("tx execution reverted", err, "revert_reason", revertReason, "raw_error_data", hex.EncodeToString(rawErrorData), "msg_index.from", from, "msg_index.to", iter.Cursor(), "tx_hash", tx.Hash())
 			return nil, err
 		}
 		if c.msgEventListener != nil {
-			if err := c.msgEventListener.OnSentMsg([]sdk.Msg{msg}); err != nil {
-				logger.Error("failed to OnSendMsg call", err, "msg_index", i, "tx_hash", tx.Hash())
+			for i := from; i < iter.Cursor(); i++ {
+				if err := c.msgEventListener.OnSentMsg([]sdk.Msg{msgs[i]}); err != nil {
+					logger.Error("failed to OnSendMsg call", err, "msg_index", i, "tx_hash", tx.Hash())
+				}
 			}
 		}
-		msgIDs = append(msgIDs, NewMsgID(tx.Hash()))
+		for i := from; i < iter.Cursor(); i++ {
+			msgIDs = append(msgIDs, NewMsgID(tx.Hash()))
+		}
 	}
 	return msgIDs, nil
 }
@@ -363,6 +337,121 @@ func (c *Chain) SendTx(opts *bind.TransactOpts, msg sdk.Msg, skipUpdateClientCom
 	}
 	return tx, err
 }
+
+type MulticallIter struct {
+	msgs []sdk.Msg
+	cursor int
+	opts  *bind.TransactOpts
+	skipUpdateClientCommitment bool
+}
+func NewMulticallIter(msgs []sdk.Msg, skipUpdateClientCommitment bool) MulticallIter {
+	return MulticallIter {
+		msgs: msgs,
+		cursor: 0,
+		skipUpdateClientCommitment: skipUpdateClientCommitment,
+	}
+}
+func (m MulticallIter) Cursor() int {
+	return m.cursor
+}
+func (m MulticallIter) IsEnd() bool {
+	return len(m.msgs) <= m.cursor
+}
+func (m MulticallIter) Next() bool {
+	if m.IsEnd() {
+		return false
+	}
+	m.cursor += 1
+	return true
+}
+func (m MulticallIter) SendMulticallTx(ctx context.Context, c *Chain) (*gethtypes.Transaction, int, error) {
+	from := m.Cursor()
+	if (m.IsEnd()) {
+		return nil, from, nil
+	}
+
+	logger := c.GetChainLogger()
+
+	var (
+		saveTx *gethtypes.Transaction
+		saveTxGasLimit uint64
+		opts *bind.TransactOpts
+	)
+
+	data := make([][]byte, 0, len(m.msgs))
+
+	opts, err := c.TxOpts(ctx);
+	if err != nil {
+		if err != nil {
+			return nil, from, err
+		}
+	}
+
+	for !m.IsEnd() {
+		opts.GasLimit = math.MaxUint64
+		opts.NoSend = true
+		tx, err := c.SendTx(opts, m.msgs[m.cursor], m.skipUpdateClientCommitment)
+		if err != nil {
+			if (saveTx != nil) {
+				break
+			}
+			return nil, from, err
+		}
+
+		data = append(data, tx.Data())
+		multiTx, err := c.ibcHandler.Multicall(opts, data)
+		if err != nil {
+			if (saveTx != nil) {
+				break
+			}
+			return nil, from, err
+		}
+
+		estimatedGas, err := c.client.EstimateGasFromTx(ctx, multiTx)
+		if err != nil {
+			if saveTx != nil {
+				break
+			}
+			revertReason, rawErrorData, err2 := c.getRevertReasonFromEstimateGas(err)
+			if err2 != nil {
+				logger.Error("failed to get revert reason", err2, "msg_index", m.Cursor())
+			}
+
+			logger.Error("failed to estimate gas", err, "revert_reason", revertReason, "raw_error_data", hex.EncodeToString(rawErrorData), "msg_index", m.Cursor())
+			return nil, from, err
+		}
+
+		txGasLimit := estimatedGas * c.Config().GasEstimateRate.Numerator / c.Config().GasEstimateRate.Denominator
+		if txGasLimit > c.Config().MaxGasLimit {
+			if (saveTx != nil) {
+				break
+			}
+			logger.Warn("estimated gas exceeds max gas limit", "estimated_gas", txGasLimit, "max_gas_limit", c.Config().MaxGasLimit, "msg_index", m.Cursor())
+			saveTxGasLimit = c.Config().MaxGasLimit
+			saveTx = multiTx
+			m.Next()
+			break
+		}
+
+		m.Next()
+		saveTxGasLimit = txGasLimit
+		saveTx = multiTx
+	}
+
+	if saveTx == nil {
+		return nil, from, nil
+	}
+
+	opts.GasLimit = saveTxGasLimit
+	opts.NoSend = false
+	tx, err := c.ibcHandler.Multicall(opts, data)
+	if err != nil {
+		logger.Error("failed to send msg / NoSend: true", err, "msg_index.from", from, "msg_index.to", m.Cursor())
+		return nil, from, err
+	}
+	return tx, from, nil
+}
+
 
 func (c *Chain) getRevertReasonFromReceipt(ctx context.Context, receipt *client.Receipt) (string, []byte, error) {
 	var errorData []byte
