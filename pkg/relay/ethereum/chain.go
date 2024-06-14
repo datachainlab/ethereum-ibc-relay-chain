@@ -24,6 +24,7 @@ import (
 
 	"github.com/datachainlab/ethereum-ibc-relay-chain/pkg/client"
 	"github.com/datachainlab/ethereum-ibc-relay-chain/pkg/contract/ibchandler"
+	"github.com/datachainlab/ethereum-ibc-relay-chain/pkg/contract/multicall3"
 )
 
 const (
@@ -42,6 +43,7 @@ type Chain struct {
 
 	client     *client.ETHClient
 	ibcHandler *ibchandler.Ibchandler
+	multicall3 *multicall3.Multicall3
 
 	signer Signer
 
@@ -70,6 +72,10 @@ func NewChain(config ChainConfig) (*Chain, error) {
 	if err != nil {
 		return nil, err
 	}
+	multicall3, err := multicall3.NewMulticall3(config.Multicall3AddressAsAddress(), client)
+	if err != nil {
+		return nil, err
+	}
 	signer, err := config.Signer.GetCachedValue().(SignerConfig).Build(big.NewInt(int64(config.EthChainId)))
 	if err != nil {
 		return nil, fmt.Errorf("failed to build signer: %v", err)
@@ -92,6 +98,7 @@ func NewChain(config ChainConfig) (*Chain, error) {
 		chainID: id,
 
 		ibcHandler: ibcHandler,
+		multicall3: multicall3,
 
 		signer: signer,
 

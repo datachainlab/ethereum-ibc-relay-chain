@@ -23,6 +23,7 @@ import (
 
 	"github.com/datachainlab/ethereum-ibc-relay-chain/pkg/client"
 	"github.com/datachainlab/ethereum-ibc-relay-chain/pkg/contract/ibchandler"
+	"github.com/datachainlab/ethereum-ibc-relay-chain/pkg/contract/multicall3"
 )
 
 // SendMsgs sends msgs to the chain
@@ -351,20 +352,20 @@ func NewMulticallIter(msgs []sdk.Msg, skipUpdateClientCommitment bool) Multicall
 		skipUpdateClientCommitment: skipUpdateClientCommitment,
 	}
 }
-func (m MulticallIter) Cursor() int {
+func (m *MulticallIter) Cursor() int {
 	return m.cursor
 }
-func (m MulticallIter) IsEnd() bool {
+func (m *MulticallIter) IsEnd() bool {
 	return len(m.msgs) <= m.cursor
 }
-func (m MulticallIter) Next() bool {
+func (m *MulticallIter) Next() bool {
 	if m.IsEnd() {
 		return false
 	}
 	m.cursor += 1
 	return true
 }
-func (m MulticallIter) SendMulticallTx(ctx context.Context, c *Chain) (*gethtypes.Transaction, int, error) {
+func (m *MulticallIter) SendMulticallTx(ctx context.Context, c *Chain) (*gethtypes.Transaction, int, error) {
 	from := m.Cursor()
 	if (m.IsEnd()) {
 		return nil, from, nil
@@ -373,12 +374,12 @@ func (m MulticallIter) SendMulticallTx(ctx context.Context, c *Chain) (*gethtype
 	logger := c.GetChainLogger()
 
 	var (
-		saveTx *gethtypes.Transaction
 		saveTxGasLimit uint64
 		opts *bind.TransactOpts
 	)
 
-	data := make([][]byte, 0, len(m.msgs))
+	calls := make([]multicall3.Multicall3Call, 0, len(m.msgs))
+	logger.Info("SentMulticallTx", "msgs", len(m.msgs), "len", len(calls), "cap", cap(calls))
 
 	opts, err := c.TxOpts(ctx);
 	if err != nil {
@@ -392,24 +393,36 @@ func (m MulticallIter) SendMulticallTx(ctx context.Context, c *Chain) (*gethtype
 		opts.NoSend = true
 		tx, err := c.SendTx(opts, m.msgs[m.cursor], m.skipUpdateClientCommitment)
 		if err != nil {
-			if (saveTx != nil) {
+			if len(calls) > 0 {
 				break
 			}
 			return nil, from, err
 		}
 
-		data = append(data, tx.Data())
-		multiTx, err := c.ibcHandler.Multicall(opts, data)
-		if err != nil {
-			if (saveTx != nil) {
+		to := tx.To(); if to == nil {
+			if len(calls) > 0 {
 				break
 			}
+			err2 := fmt.Errorf("no target address")
+			logger.Error("failed to construct Multicall3Call", err2, "msg_index", m.Cursor())
+			return nil, from, err2
+		}
+		newCalls := append(calls, multicall3.Multicall3Call{
+			Target: *tx.To(),
+			CallData: tx.Data(),
+		})
+		multiTx, err := c.multicall3.Aggregate(opts, newCalls)
+		if err != nil {
+			if len(calls) > 0 {
+				break
+			}
+			logger.Error("failed to call Multicall3.Aggregate", err, "msg_index", m.Cursor())
 			return nil, from, err
 		}
 
 		estimatedGas, err := c.client.EstimateGasFromTx(ctx, multiTx)
 		if err != nil {
-			if saveTx != nil {
+			if len(calls) > 0 {
 				break
 			}
 			revertReason, rawErrorData, err2 := c.getRevertReasonFromEstimateGas(err)
@@ -423,28 +436,29 @@ func (m MulticallIter) SendMulticallTx(ctx context.Context, c *Chain) (*gethtype
 
 		txGasLimit := estimatedGas * c.Config().GasEstimateRate.Numerator / c.Config().GasEstimateRate.Denominator
 		if txGasLimit > c.Config().MaxGasLimit {
-			if (saveTx != nil) {
+			if len(calls) > 0 {
 				break
 			}
 			logger.Warn("estimated gas exceeds max gas limit", "estimated_gas", txGasLimit, "max_gas_limit", c.Config().MaxGasLimit, "msg_index", m.Cursor())
 			saveTxGasLimit = c.Config().MaxGasLimit
-			saveTx = multiTx
 			m.Next()
 			break
 		}
 
 		m.Next()
 		saveTxGasLimit = txGasLimit
-		saveTx = multiTx
+		calls = newCalls
+		logger.Info("next", "cursor", m.Cursor(), "len", len(calls), "cap", cap(calls))
 	}
 
-	if saveTx == nil {
+	if len(calls) == 0 {
 		return nil, from, nil
 	}
 
 	opts.GasLimit = saveTxGasLimit
 	opts.NoSend = false
-	tx, err := c.ibcHandler.Multicall(opts, data)
+	logger.Info("multicall", "count", len(calls))
+	tx, err := c.multicall3.Aggregate(opts, calls)
 	if err != nil {
 		logger.Error("failed to send msg / NoSend: true", err, "msg_index.from", from, "msg_index.to", m.Cursor())
 		return nil, from, err
