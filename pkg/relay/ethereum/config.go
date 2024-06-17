@@ -112,6 +112,10 @@ func (c ChainConfig) IBCAddress() common.Address {
 	return common.HexToAddress(c.IbcAddress)
 }
 
+func (c ChainConfig) Multicall3AddressAsAddress() common.Address {
+	return common.HexToAddress(c.Multicall3Address)
+}
+
 func (alf AllowLCFunctionsConfig) ValidateBasic() error {
 	if !common.IsHexAddress(alf.LcAddress) {
 		return fmt.Errorf("invalid contract address: %s", alf.LcAddress)

@@ -23,6 +23,7 @@ import (
 
 	"github.com/datachainlab/ethereum-ibc-relay-chain/pkg/client"
 	"github.com/datachainlab/ethereum-ibc-relay-chain/pkg/contract/ibchandler"
+	"github.com/datachainlab/ethereum-ibc-relay-chain/pkg/contract/multicall3"
 )
 
 // SendMsgs sends msgs to the chain
@@ -38,59 +39,21 @@ func (c *Chain) SendMsgs(msgs []sdk.Msg) ([]core.MsgID, error) {
 	defer c.ethereumSigner.SetLogger(ethereumSignerLogger)
 
 	var msgIDs []core.MsgID
-	for i, msg := range msgs {
-		logger := &log.RelayLogger{Logger: logger.With(
-			logAttrMsgIndex, i,
-			logAttrMsgType, fmt.Sprintf("%T", msg),
-		)}
 
-		opts, err := c.TxOpts(ctx, true)
-		if err != nil {
-			return nil, err
-		}
+	iter := NewCallIter(msgs, skipUpdateClientCommitment)
+	for !iter.End() {
+		from := iter.Cursor()
+		logger := &log.RelayLogger{Logger: logger.With(logAttrMsgIndexFrom, from)}
 		c.ethereumSigner.SetLogger(logger);
 
-		// gas estimation
-		{
-			logger := &log.RelayLogger{Logger: logger.Logger}
+		tx, err := iter.SendTx(ctx, c)
+		logger.Logger = logger.With(logAttrMsgIndexTo, iter.Cursor())
 
-			opts.GasLimit = math.MaxUint64
-			opts.NoSend = true
-			tx, err := c.SendTx(opts, msg, skipUpdateClientCommitment)
-			if err != nil {
-				logger.Error("failed to build tx for gas estimation", err)
-				return nil, err
-			}
-
-			if rawTxData, err := tx.MarshalBinary(); err != nil {
-				logger.Error("failed to encode tx", err)
-			} else {
-				logger.Logger = logger.With(logAttrRawTxData, hex.EncodeToString(rawTxData))
-			}
-
-			estimatedGas, err := c.client.EstimateGasFromTx(ctx, tx)
-			if err != nil {
-				revertReason, data := c.parseRpcError(err)
-				logger.Error("failed to estimate gas", err, logAttrRevertReason, revertReason, logAttrRawErrorData, data)
-				return nil, err
-			}
-
-			txGasLimit := estimatedGas * c.Config().GasEstimateRate.Numerator / c.Config().GasEstimateRate.Denominator
-			if txGasLimit > c.Config().MaxGasLimit {
-				logger.Warn("estimated gas exceeds max gas limit",
-					logAttrEstimatedGas, txGasLimit,
-					logAttrMaxGasLimit, c.Config().MaxGasLimit,
-				)
-				txGasLimit = c.Config().MaxGasLimit
-			}
-			opts.GasLimit = txGasLimit
-		}
-
-		opts.NoSend = false
-		tx, err := c.SendTx(opts, msg, skipUpdateClientCommitment)
 		if err != nil {
 			logger.Error("failed to send msg", err)
 			return nil, err
+		} else if tx == nil {
+			break
 		} else {
 			logger.Logger = logger.With(logAttrTxHash, tx.Hash())
 		}
@@ -131,11 +94,15 @@ func (c *Chain) SendMsgs(msgs []sdk.Msg) ([]core.MsgID, error) {
 		}
 		logger.Info("successfully sent tx")
 		if c.msgEventListener != nil {
-			if err := c.msgEventListener.OnSentMsg([]sdk.Msg{msg}); err != nil {
-				logger.Error("failed to OnSendMsg call", err)
+			for i := from; i < iter.Cursor(); i++ {
+				if err := c.msgEventListener.OnSentMsg([]sdk.Msg{msgs[i]}); err != nil {
+					logger.Error("failed to OnSendMsg call", err, "index", i)
+				}
 			}
 		}
-		msgIDs = append(msgIDs, NewMsgID(tx.Hash()))
+		for i := from; i < iter.Cursor(); i++ {
+			msgIDs = append(msgIDs, NewMsgID(tx.Hash()))
+		}
 	}
 	return msgIDs, nil
 }
@@ -460,3 +427,222 @@ func (c *Chain) parseRpcError(err error) (string, string) {
 	// Note that Raw error data may be available even if revert reason isn't available.
 	return revertReason, hex.EncodeToString(rawErrorData)
 }
+
+type CallIter struct {
+	msgs []sdk.Msg
+	cursor int
+	skipUpdateClientCommitment bool
+}
+func NewCallIter(msgs []sdk.Msg, skipUpdateClientCommitment bool) CallIter {
+	return CallIter {
+		msgs: msgs,
+		cursor: 0,
+		skipUpdateClientCommitment: skipUpdateClientCommitment,
+	}
+}
+func (iter *CallIter) Cursor() int {
+	return iter.cursor
+}
+func (iter *CallIter) Current() *sdk.Msg {
+	return &iter.msgs[iter.cursor]
+}
+func (iter *CallIter) End() bool {
+	return len(iter.msgs) <= iter.cursor
+}
+func (iter *CallIter) Next() bool {
+	if iter.End() {
+		return false
+	}
+	iter.cursor += 1
+	return true
+}
+
+func (iter *CallIter) SendTx(ctx context.Context, c *Chain) (*gethtypes.Transaction, error) {
+	if c.multicall3 == nil {
+		return iter.sendSingleTx(ctx, c)
+	} else {
+		return iter.sendMultiTx(ctx, c)
+	}
+}
+
+func (iter *CallIter) sendSingleTx(ctx context.Context, c *Chain) (*gethtypes.Transaction, error) {
+	if iter.End() {
+		return nil, nil
+	}
+
+	logger := c.GetChainLogger()
+	logger = &log.RelayLogger{Logger: logger.With(
+		logAttrMsgIndexFrom, iter.Cursor(),
+		logAttrMsgIndexTo, iter.Cursor(),
+		logAttrMsgType, fmt.Sprintf("%T", *iter.Current()),
+	)}
+
+	opts, err := c.TxOpts(ctx, true);
+	if err != nil {
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// gas estimation
+	{
+		logger := &log.RelayLogger{Logger: logger.Logger}
+
+		opts.GasLimit = math.MaxUint64
+		opts.NoSend = true
+		tx, err := c.SendTx(opts, *iter.Current(), iter.skipUpdateClientCommitment)
+		if err != nil {
+			logger.Error("failed to build tx for gas estimation", err)
+			return nil, err
+		}
+
+		if rawTxData, err := tx.MarshalBinary(); err != nil {
+			logger.Error("failed to encode tx", err)
+		} else {
+			logger.Logger = logger.With(logAttrRawTxData, hex.EncodeToString(rawTxData))
+		}
+
+		estimatedGas, err := c.client.EstimateGasFromTx(ctx, tx)
+		if err != nil {
+			revertReason, data := c.parseRpcError(err)
+			logger.Error("failed to estimate gas", err, logAttrRevertReason, revertReason, logAttrRawErrorData, data)
+			return nil, err
+		}
+
+		txGasLimit := estimatedGas * c.Config().GasEstimateRate.Numerator / c.Config().GasEstimateRate.Denominator
+		if txGasLimit > c.Config().MaxGasLimit {
+			logger.Warn("estimated gas exceeds max gas limit",
+				logAttrEstimatedGas, txGasLimit,
+				logAttrMaxGasLimit, c.Config().MaxGasLimit,
+			)
+			txGasLimit = c.Config().MaxGasLimit
+		}
+		opts.GasLimit = txGasLimit
+	}
+
+	opts.NoSend = false
+	tx, err := c.SendTx(opts, *iter.Current(), iter.skipUpdateClientCommitment)
+	if err != nil {
+		logger.Error("failed to send msg", err)
+		return nil, err
+	}
+	iter.Next()
+	return tx, nil
+}
+
+func (iter *CallIter) sendMultiTx(ctx context.Context, c *Chain) (*gethtypes.Transaction, error) {
+	from := iter.Cursor()
+	if (iter.End()) {
+		return nil, nil
+	}
+
+	logger := c.GetChainLogger()
+
+	var (
+		saveTxGasLimit uint64
+		saveRawTxData string
+	)
+	calls := make([]multicall3.Multicall3Call, 0, len(iter.msgs))
+
+	opts, err := c.TxOpts(ctx, true);
+	if err != nil {
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	for !iter.End() && saveTxGasLimit < c.Config().MaxGasLimit {
+		logger := &log.RelayLogger{Logger: logger.With(
+			logAttrMsgIndexFrom, from,
+			logAttrMsgIndexTo, iter.Cursor(),
+			logAttrMsgType, fmt.Sprintf("%T", *iter.Current()),
+		)}
+
+		opts.GasLimit = math.MaxUint64
+		opts.NoSend = true
+		tx, err := c.SendTx(opts, *iter.Current(), iter.skipUpdateClientCommitment)
+		if err != nil {
+			if len(calls) > 0 {
+				break
+			}
+			logger.Error("failed to build tx for gas estimation", err)
+			return nil, err
+		}
+
+		to := tx.To(); if to == nil {
+			if len(calls) > 0 {
+				break
+			}
+			err2 := fmt.Errorf("no target address")
+			logger.Error("failed to construct Multicall3Call", err2)
+			return nil, err2
+		}
+
+		newCalls := append(calls, multicall3.Multicall3Call{
+			Target: *tx.To(),
+			CallData: tx.Data(),
+		})
+		multiTx, err := c.multicall3.Aggregate(opts, newCalls)
+		if err != nil {
+			if len(calls) > 0 {
+				break
+			}
+			logger.Error("failed to call Multicall3.Aggregate", err)
+			return nil, err
+		}
+
+		if rawTxData, err := multiTx.MarshalBinary(); err != nil {
+			logger.Error("failed to encode multiTx", err)
+		} else {
+			saveRawTxData = hex.EncodeToString(rawTxData)
+			logger.Logger = logger.With(logAttrRawTxData, saveRawTxData)
+		}
+
+		estimatedGas, err := c.client.EstimateGasFromTx(ctx, multiTx)
+		if err != nil {
+			if len(calls) > 0 {
+				break
+			}
+
+			revertReason, data := c.parseRpcError(err)
+			logger.Error("failed to estimate gas", err, logAttrRevertReason, revertReason, logAttrRawErrorData, data)
+			return nil, err
+		}
+
+		txGasLimit := estimatedGas * c.Config().GasEstimateRate.Numerator / c.Config().GasEstimateRate.Denominator
+		if txGasLimit > c.Config().MaxGasLimit {
+			if len(calls) > 0 {
+				break
+			}
+			logger.Warn("estimated gas exceeds max gas limit",
+				logAttrEstimatedGas, txGasLimit,
+				logAttrMaxGasLimit, c.Config().MaxGasLimit,
+			)
+			// pass. break in for condition
+		}
+
+		saveTxGasLimit = txGasLimit
+		calls = newCalls
+		iter.Next()
+	}
+
+	if len(calls) == 0 {
+		return nil, nil
+	}
+
+	logger = &log.RelayLogger{Logger: logger.With(
+		logAttrMsgIndexFrom, from,
+		logAttrMsgIndexTo, iter.Cursor(),
+		logAttrRawTxData, saveRawTxData,
+	)}
+
+	opts.GasLimit = min(saveTxGasLimit, c.Config().MaxGasLimit)
+	opts.NoSend = false
+	tx, err := c.multicall3.Aggregate(opts, calls)
+	if err != nil {
+		logger.Error("failed to send msg", err)
+		return nil, err
+	}
+	return tx, nil
+}
+
