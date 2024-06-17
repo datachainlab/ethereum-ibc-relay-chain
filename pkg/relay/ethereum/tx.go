@@ -39,9 +39,21 @@ func (c *Chain) SendMsgs(msgs []sdk.Msg) ([]core.MsgID, error) {
 
 	iter := NewMulticallIter(msgs, skipUpdateClientCommitment)
 	for !iter.IsEnd() {
-		tx, from, err := iter.SendMulticallTx(ctx, c)
+		from := iter.Cursor()
+		tx, err := iter.SendTx(ctx, c)
 		if err != nil {
+			logger.Error("failed to send msg", err)
 			return nil, err
+		}
+		if tx == nil {
+			break
+		}
+
+		logger.Logger = logger.With(logAttrTxHash, tx.Hash())
+		if rawTxData, err := tx.MarshalBinary(); err != nil {
+			logger.Error("failed to encode tx", err)
+		} else {
+			logger.Logger = logger.With(logAttrRawTxData, hex.EncodeToString(rawTxData))
 		}
 
 		receipt, err := c.client.WaitForReceiptAndGet(ctx, tx.Hash())
@@ -355,6 +367,9 @@ func NewMulticallIter(msgs []sdk.Msg, skipUpdateClientCommitment bool) Multicall
 func (m *MulticallIter) Cursor() int {
 	return m.cursor
 }
+func (m *MulticallIter) Current() *sdk.Msg {
+	return &m.msgs[m.cursor]
+}
 func (m *MulticallIter) IsEnd() bool {
 	return len(m.msgs) <= m.cursor
 }
@@ -365,10 +380,19 @@ func (m *MulticallIter) Next() bool {
 	m.cursor += 1
 	return true
 }
-func (m *MulticallIter) SendMulticallTx(ctx context.Context, c *Chain) (*gethtypes.Transaction, int, error) {
+
+func (m *MulticallIter) SendTx(ctx context.Context, c *Chain) (*gethtypes.Transaction, error) {
+	if c.multicall3 == nil {
+		return m.sendSinglecallTx(ctx, c)
+	} else {
+		return m.sendMultilcallTx(ctx, c)
+	}
+}
+
+func (m *MulticallIter) sendMulticallTx(ctx context.Context, c *Chain) (*gethtypes.Transaction, error) {
 	from := m.Cursor()
 	if (m.IsEnd()) {
-		return nil, from, nil
+		return nil, nil
 	}
 
 	logger := c.GetChainLogger()
@@ -384,19 +408,24 @@ func (m *MulticallIter) SendMulticallTx(ctx context.Context, c *Chain) (*gethtyp
 	opts, err := c.TxOpts(ctx);
 	if err != nil {
 		if err != nil {
-			return nil, from, err
+			return nil, err
 		}
 	}
 
 	for !m.IsEnd() {
+		logger := &log.RelayLogger{Logger: logger.With(
+			logAttrMsgIndex, m.Cursor(),
+			logAttrMsgType, fmt.Sprintf("%T", m.Current()),
+		)}
+
 		opts.GasLimit = math.MaxUint64
 		opts.NoSend = true
-		tx, err := c.SendTx(opts, m.msgs[m.cursor], m.skipUpdateClientCommitment)
+		tx, err := c.SendTx(opts, m.Current(), m.skipUpdateClientCommitment)
 		if err != nil {
 			if len(calls) > 0 {
 				break
 			}
-			return nil, from, err
+			return nil, err
 		}
 
 		to := tx.To(); if to == nil {
@@ -405,7 +434,7 @@ func (m *MulticallIter) SendMulticallTx(ctx context.Context, c *Chain) (*gethtyp
 			}
 			err2 := fmt.Errorf("no target address")
 			logger.Error("failed to construct Multicall3Call", err2, "msg_index", m.Cursor())
-			return nil, from, err2
+			return nil, err2
 		}
 		newCalls := append(calls, multicall3.Multicall3Call{
 			Target: *tx.To(),
@@ -417,7 +446,7 @@ func (m *MulticallIter) SendMulticallTx(ctx context.Context, c *Chain) (*gethtyp
 				break
 			}
 			logger.Error("failed to call Multicall3.Aggregate", err, "msg_index", m.Cursor())
-			return nil, from, err
+			return nil, err
 		}
 
 		estimatedGas, err := c.client.EstimateGasFromTx(ctx, multiTx)
@@ -431,7 +460,7 @@ func (m *MulticallIter) SendMulticallTx(ctx context.Context, c *Chain) (*gethtyp
 			}
 
 			logger.Error("failed to estimate gas", err, "revert_reason", revertReason, "raw_error_data", hex.EncodeToString(rawErrorData), "msg_index", m.Cursor())
-			return nil, from, err
+			return nil, err
 		}
 
 		txGasLimit := estimatedGas * c.Config().GasEstimateRate.Numerator / c.Config().GasEstimateRate.Denominator
@@ -440,19 +469,18 @@ func (m *MulticallIter) SendMulticallTx(ctx context.Context, c *Chain) (*gethtyp
 				break
 			}
 			logger.Warn("estimated gas exceeds max gas limit", "estimated_gas", txGasLimit, "max_gas_limit", c.Config().MaxGasLimit, "msg_index", m.Cursor())
-			saveTxGasLimit = c.Config().MaxGasLimit
-			m.Next()
-			break
+			txGasLimit = c.Config().MaxGasLimit
+			// pass
 		}
 
-		m.Next()
 		saveTxGasLimit = txGasLimit
 		calls = newCalls
+		m.Next()
 		logger.Info("next", "cursor", m.Cursor(), "len", len(calls), "cap", cap(calls))
 	}
 
 	if len(calls) == 0 {
-		return nil, from, nil
+		return nil, nil
 	}
 
 	opts.GasLimit = saveTxGasLimit
@@ -461,9 +489,75 @@ func (m *MulticallIter) SendMulticallTx(ctx context.Context, c *Chain) (*gethtyp
 	tx, err := c.multicall3.Aggregate(opts, calls)
 	if err != nil {
 		logger.Error("failed to send msg / NoSend: true", err, "msg_index.from", from, "msg_index.to", m.Cursor())
-		return nil, from, err
+		return nil, err
 	}
-	return tx, from, nil
+	return tx, nil
+}
+
+func (m *MulticallIter) sendMulticallTx(ctx context.Context, c *Chain) (*gethtypes.Transaction, int, error) {
+	if m.IsEnd() {
+		return nil, m.Cursor(), nil
+	}
+
+	logger := &log.RelayLogger{Logger: logger.With(
+		logAttrMsgIndex, m.Cursor(),
+		logAttrMsgType, fmt.Sprintf("%T", m.Current()),
+	)}
+
+	// gas estimation
+	{
+		logger := &log.RelayLogger{Logger: logger.Logger}
+
+		opts.GasLimit = math.MaxUint64
+		opts.NoSend = true
+		tx, err := c.SendTx(opts, m.Current(), skipUpdateClientCommitment)
+		if err != nil {
+			logger.Error("failed to build tx for gas estimation", err)
+			return nil, err
+		}
+
+		if rawTxData, err := tx.MarshalBinary(); err != nil {
+			logger.Error("failed to encode tx", err)
+		} else {
+			logger.Logger = logger.With(logAttrRawTxData, hex.EncodeToString(rawTxData))
+		}
+
+		estimatedGas, err := c.client.EstimateGasFromTx(ctx, tx)
+		if err != nil {
+			if revertReason, rawErrorData, err := c.getRevertReasonFromEstimateGas(err); err != nil {
+				// Raw error data may be available even if revert reason isn't available.
+				logger.Logger = logger.With(logAttrRawErrorData, hex.EncodeToString(rawErrorData))
+				logger.Error("failed to get revert reason", err)
+			} else {
+				logger.Logger = logger.With(
+					logAttrRawErrorData, hex.EncodeToString(rawErrorData),
+					logAttrRevertReason, revertReason,
+				)
+			}
+
+			logger.Error("failed to estimate gas", err)
+			return nil, err
+		}
+
+		txGasLimit := estimatedGas * c.Config().GasEstimateRate.Numerator / c.Config().GasEstimateRate.Denominator
+		if txGasLimit > c.Config().MaxGasLimit {
+			logger.Warn("estimated gas exceeds max gas limit",
+				logAttrEstimatedGas, txGasLimit,
+				logAttrMaxGasLimit, c.Config().MaxGasLimit,
+			)
+			txGasLimit = c.Config().MaxGasLimit
+		}
+		opts.GasLimit = txGasLimit
+	}
+
+	opts.NoSend = false
+	tx, err := c.SendTx(opts, m.Current(), skipUpdateClientCommitment)
+	if err != nil {
+		logger.Error("failed to send msg", err)
+		return nil, m.Cursor(), err
+	}
+	m.Next()
+	return tx, nil
 }
 
 
