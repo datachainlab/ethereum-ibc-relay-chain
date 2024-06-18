@@ -19,6 +19,7 @@ import (
 	ibcexported "github.com/cosmos/ibc-go/v8/modules/core/exported"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/hyperledger-labs/yui-relayer/core"
 	"github.com/hyperledger-labs/yui-relayer/signer"
 	"github.com/hyperledger-labs/yui-relayer/log"
@@ -75,7 +76,7 @@ func NewChain(config ChainConfig) (*Chain, error) {
 	}
 
 	var multicall3_ *multicall3.Multicall3
-	if addr := config.Multicall3AddressAsAddress(); addr.Hex() != "0x0000000000000000000000000000000000000000" {
+	if addr := config.Multicall3AddressAsAddress(); (addr != common.Address{}) {
 		contract, err := multicall3.NewMulticall3(addr, client)
 		if err != nil {
 			return nil, err
