@@ -10,7 +10,7 @@ require (
 	github.com/cosmos/gogoproto v1.4.11
 	github.com/cosmos/ibc-go/v8 v8.2.0
 	github.com/ethereum/go-ethereum v1.13.15
-	github.com/hyperledger-labs/yui-relayer v0.5.1
+	github.com/hyperledger-labs/yui-relayer v0.5.4
 	github.com/spf13/cobra v1.8.0
 	github.com/stretchr/testify v1.9.0
 	github.com/tyler-smith/go-bip39 v1.1.0

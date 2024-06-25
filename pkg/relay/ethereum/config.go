@@ -12,6 +12,7 @@ import (
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/hyperledger-labs/yui-relayer/core"
+	"github.com/hyperledger-labs/yui-relayer/signer"
 )
 
 var (
@@ -59,7 +60,7 @@ func (c ChainConfig) Validate() error {
 	}
 	if c.Signer == nil {
 		errs = append(errs, fmt.Errorf("config attribute \"signer\" is empty"))
-	} else if err := c.Signer.GetCachedValue().(SignerConfig).Validate(); err != nil {
+	} else if err := c.Signer.GetCachedValue().(signer.SignerConfig).Validate(); err != nil {
 		errs = append(errs, fmt.Errorf("config attribute \"signer\" is invalid: %v", err))
 	}
 	if c.AllowLcFunctions != nil {
@@ -101,7 +102,7 @@ func (f Fraction) Mul(n *big.Int) {
 }
 
 func (c ChainConfig) UnpackInterfaces(unpacker codectypes.AnyUnpacker) error {
-	if err := unpacker.UnpackAny(c.Signer, new(SignerConfig)); err != nil {
+	if err := unpacker.UnpackAny(c.Signer, new(signer.SignerConfig)); err != nil {
 		return fmt.Errorf("failed to unpack ChainConfig attribute \"signer\": %v", err)
 	}
 	return nil

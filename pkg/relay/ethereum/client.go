@@ -9,7 +9,7 @@ import (
 
 func (chain *Chain) CallOpts(ctx context.Context, height int64) *bind.CallOpts {
 	opts := &bind.CallOpts{
-		From:    chain.signer.Address(),
+		From:    chain.ethereumSigner.Address(),
 		Context: ctx,
 	}
 	if height > 0 {
@@ -19,11 +19,11 @@ func (chain *Chain) CallOpts(ctx context.Context, height int64) *bind.CallOpts {
 }
 
 func (chain *Chain) TxOpts(ctx context.Context, useLatestNonce bool) (*bind.TransactOpts, error) {
-	addr := chain.signer.Address()
+	addr := chain.ethereumSigner.Address()
 
 	txOpts := &bind.TransactOpts{
 		From:   addr,
-		Signer: chain.signer.Sign,
+		Signer: chain.ethereumSigner.Sign,
 	}
 
 	if err := NewGasFeeCalculator(chain.client, &chain.config).Apply(ctx, txOpts); err != nil {
