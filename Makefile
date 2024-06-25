@@ -1,5 +1,5 @@
 FORGE  ?= forge
-ABIGEN ?= docker run -v .:/workspace -w /workspace -it ethereum/client-go:alltools-v1.14.0 abigen
+ABIGEN ?= docker run -u $$(id -u):$$(id -g) -v .:/workspace -w /workspace -it ethereum/client-go:alltools-v1.14.0 abigen
 
 DOCKER := $(shell which docker)
 
@@ -18,13 +18,17 @@ submodule:
 
 .PHONY: compile
 compile:
+	cp contract/*.sol ./yui-ibc-solidity/contracts/
 	$(FORGE) build --config-path ./yui-ibc-solidity/foundry.toml
 
 .PHONY: abigen
 abigen: compile
-	@mkdir -p ./build/abi ./pkg/contract/ibchandler
-	@jq -r '.abi' ./yui-ibc-solidity/out/IBCHandler.sol/IBCHandler.json > ./build/abi/IBCHandler.abi
-	@$(ABIGEN) --abi ./build/abi/IBCHandler.abi --pkg ibchandler --out ./pkg/contract/ibchandler/ibchandler.go
+	@for a in IBCHandler Multicall3; do \
+	  b=$$(echo $$a | tr '[A-Z]' '[a-z]'); \
+	  mkdir -p ./build/abi ./pkg/contract/$$b; \
+	  jq -r '.abi' ./yui-ibc-solidity/out/$$a.sol/$$a.json > ./build/abi/$$a.abi; \
+	  $(ABIGEN) --abi ./build/abi/$$a.abi --pkg $$b --out ./pkg/contract/$$b/$$b.go; \
+	done
 
 .PHONY: proto-gen proto-update-deps
 proto-gen:
