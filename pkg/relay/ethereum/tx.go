@@ -502,20 +502,14 @@ func (iter *CallIter) sendSingleTx(ctx context.Context, c *Chain) (*gethtypes.Tr
 			logger.Logger = logger.With(logAttrRawTxData, hex.EncodeToString(rawTxData))
 		}
 
-		estimatedGas, err := c.client.EstimateGasFromTx(ctx, tx)
+		txGasLimit, isBreak, err := estimateGas(ctx, c, tx, false, logger)
 		if err != nil {
 			revertReason, data := c.parseRpcError(err)
 			logger.Error("failed to estimate gas", err, logAttrRevertReason, revertReason, logAttrRawErrorData, data)
 			return nil, err
 		}
-
-		txGasLimit := estimatedGas * c.Config().GasEstimateRate.Numerator / c.Config().GasEstimateRate.Denominator
-		if txGasLimit > c.Config().MaxGasLimit {
-			logger.Warn("estimated gas exceeds max gas limit",
-				logAttrEstimatedGas, txGasLimit,
-				logAttrMaxGasLimit, c.Config().MaxGasLimit,
-			)
-			txGasLimit = c.Config().MaxGasLimit
+		if isBreak {
+			return nil, fmt.Errorf("isBraek should not be false")
 		}
 		opts.GasLimit = txGasLimit
 	}
@@ -598,7 +592,7 @@ func (iter *CallIter) sendMultiTx(ctx context.Context, c *Chain) (*gethtypes.Tra
 			logger.Logger = logger.With(logAttrRawTxData, saveRawTxData)
 		}
 
-		estimatedGas, err := c.client.EstimateGasFromTx(ctx, multiTx)
+		txGasLimit, isBreak, err := estimateGas(ctx, c, multiTx, 0 < len(calls), logger)
 		if err != nil {
 			if len(calls) > 0 {
 				break
@@ -608,27 +602,16 @@ func (iter *CallIter) sendMultiTx(ctx context.Context, c *Chain) (*gethtypes.Tra
 			logger.Error("failed to estimate gas", err, logAttrRevertReason, revertReason, logAttrRawErrorData, data)
 			return nil, err
 		}
-
-		txGasLimit := estimatedGas * c.Config().GasEstimateRate.Numerator / c.Config().GasEstimateRate.Denominator
-		if txGasLimit > c.Config().MaxGasLimit {
-			if len(calls) > 0 {
-				break
-			}
-			logger.Warn("estimated gas exceeds max gas limit",
-				logAttrEstimatedGas, txGasLimit,
-				logAttrMaxGasLimit, c.Config().MaxGasLimit,
-			)
-			// pass. break in for condition
+		if isBreak { // tx is fail or gas overs limit and 0 < len(calls)
+			break // send txs with last calls
 		}
 
+		// this calls is ok. save it and try to include next call
 		saveTxGasLimit = txGasLimit
 		calls = newCalls
 		iter.Next()
 	}
-
-	if len(calls) == 0 {
-		return nil, nil
-	}
+	// now len(calls) > 0
 
 	logger = &log.RelayLogger{Logger: logger.With(
 		logAttrMsgIndexFrom, from,
@@ -644,5 +627,49 @@ func (iter *CallIter) sendMultiTx(ctx context.Context, c *Chain) (*gethtypes.Tra
 		return nil, err
 	}
 	return tx, nil
+}
+
+
+func estimateGas(
+	ctx context.Context,
+	c *Chain,
+	tx *gethtypes.Transaction,
+	doBreak bool, // return 0,nil if error or gas is over
+	logger *log.RelayLogger,
+) (uint64, bool, error) {
+	estimatedGas, err := c.client.EstimateGasFromTx(ctx, tx)
+	if err != nil {
+		if doBreak {
+			return 0, true, nil
+		}
+
+		if revertReason, rawErrorData, err := c.getRevertReasonFromEstimateGas(err); err != nil {
+			// Raw error data may be available even if revert reason isn't available.
+			logger.Logger = logger.With(logAttrRawErrorData, hex.EncodeToString(rawErrorData))
+			logger.Error("failed to get revert reason", err)
+		} else {
+			logger.Logger = logger.With(
+				logAttrRawErrorData, hex.EncodeToString(rawErrorData),
+				logAttrRevertReason, revertReason,
+			)
+		}
+
+		logger.Error("failed to estimate gas", err)
+		return 0, false, err
+	}
+
+	txGasLimit := estimatedGas * c.Config().GasEstimateRate.Numerator / c.Config().GasEstimateRate.Denominator
+	if txGasLimit > c.Config().MaxGasLimit {
+		if doBreak {
+			return 0, true, nil
+		}
+		logger.Warn("estimated gas exceeds max gas limit",
+			logAttrEstimatedGas, txGasLimit,
+			logAttrMaxGasLimit, c.Config().MaxGasLimit,
+		)
+		return c.Config().MaxGasLimit, false, nil
+	}
+
+	return txGasLimit, false, nil
 }
 
