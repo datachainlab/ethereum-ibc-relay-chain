@@ -430,6 +430,7 @@ func (c *Chain) parseRpcError(err error) (string, string) {
 
 type CallIter struct {
 	msgs []sdk.Msg
+	txs []gethtypes.Transaction
 	cursor int
 	skipUpdateClientCommitment bool
 }
@@ -496,20 +497,11 @@ func (iter *CallIter) sendSingleTx(ctx context.Context, c *Chain) (*gethtypes.Tr
 			return nil, err
 		}
 
-		if rawTxData, err := tx.MarshalBinary(); err != nil {
-			logger.Error("failed to encode tx", err)
-		} else {
-			logger.Logger = logger.With(logAttrRawTxData, hex.EncodeToString(rawTxData))
-		}
-
-		txGasLimit, isBreak, err := estimateGas(ctx, c, tx, false, logger)
+		txGasLimit, err := estimateGas(ctx, c, tx, true, logger)
 		if err != nil {
 			revertReason, data := c.parseRpcError(err)
 			logger.Error("failed to estimate gas", err, logAttrRevertReason, revertReason, logAttrRawErrorData, data)
 			return nil, err
-		}
-		if isBreak {
-			return nil, fmt.Errorf("isBraek should not be false")
 		}
 		opts.GasLimit = txGasLimit
 	}
@@ -524,19 +516,15 @@ func (iter *CallIter) sendSingleTx(ctx context.Context, c *Chain) (*gethtypes.Tr
 	return tx, nil
 }
 
+/*
 func (iter *CallIter) sendMultiTx(ctx context.Context, c *Chain) (*gethtypes.Transaction, error) {
 	from := iter.Cursor()
 	if (iter.End()) {
 		return nil, nil
 	}
+	// now iter.cursor < len(iter.msgs)
 
 	logger := c.GetChainLogger()
-
-	var (
-		saveTxGasLimit uint64
-		saveRawTxData string
-	)
-	calls := make([]multicall3.Multicall3Call, 0, len(iter.msgs))
 
 	opts, err := c.TxOpts(ctx, true);
 	if err != nil {
@@ -545,54 +533,93 @@ func (iter *CallIter) sendMultiTx(ctx context.Context, c *Chain) (*gethtypes.Tra
 		}
 	}
 
-	for !iter.End() && saveTxGasLimit < c.Config().MaxGasLimit {
+	if iter.txs == nil { // create txs at first multicall call
+		opts.GasLimit = math.MaxUint64
+		opts.NoSend = true
+		txs := make([]gethtypes.Transaction, 0, len(iter.msgs))
+		for i := 0; i < len(iter.msgs); i++ {
+			tx, err := c.SendTx(opts, iter.msgs[i], iter.skipUpdateClientCommitment)
+			if err != nil {
+				logger := &log.RelayLogger{Logger: logger.With(
+					logAttrMsgIndexFrom, i,
+					logAttrMsgIndexTo, i,
+					logAttrMsgType, fmt.Sprintf("%T", iter.msgs[i]),
+				)}
+				logger.Error("failed to build tx for gas estimation", err)
+				return nil, err
+			}
+			if tx.To() == nil {
+				err2 := fmt.Errorf("no target address")
+				logger.Error("failed to construct Multicall3Call", err2)
+				return nil, err2
+			}
+			txs = append(txs, *tx)
+		}
+		iter.txs = txs
+	}
+
+	var (
+		lastOkRawTxData string
+		lastOkCalls []multicall3.Multicall3Call
+		lastOkGasLimit uint64
+	)
+	lastOkIndex := len(iter.msgs) // it means undefined
+	lastNgIndex := len(iter.msgs) // it means undefined
+L1:
+	for true {
+		var index int
+		fmt.Printf("for: msgs=%d, lastOk=%d, lastNg=%d\n", len(iter.msgs), lastOkIndex,lastNgIndex)
+		if lastNgIndex == len(iter.msgs) {
+			// note that 0 < len(iter.msgs)
+			index = len(iter.msgs) - 1
+			if lastOkIndex == index {
+				break
+			}
+		} else if lastOkIndex == len(iter.msgs) {
+			// note that lastNgIndex != from
+			index = (lastNgIndex - from) / 2
+		} else if lastOkIndex + 1 == lastNgIndex {
+			break
+		} else {
+			index = (lastNgIndex - lastOkIndex) / 2
+		}
+		fmt.Printf("for: index=%d\n", index)
+
 		logger := &log.RelayLogger{Logger: logger.With(
 			logAttrMsgIndexFrom, from,
-			logAttrMsgIndexTo, iter.Cursor(),
-			logAttrMsgType, fmt.Sprintf("%T", *iter.Current()),
+			logAttrMsgIndexTo, index,
+			logAttrMsgType, fmt.Sprintf("%T", iter.msgs[index]),
 		)}
 
 		opts.GasLimit = math.MaxUint64
 		opts.NoSend = true
-		tx, err := c.SendTx(opts, *iter.Current(), iter.skipUpdateClientCommitment)
-		if err != nil {
-			if len(calls) > 0 {
-				break
-			}
-			logger.Error("failed to build tx for gas estimation", err)
-			return nil, err
+		calls := make([]multicall3.Multicall3Call, 0, len(iter.msgs))
+		for i := from; i <= index; i++ {
+			calls = append(calls, multicall3.Multicall3Call{
+				Target: *iter.txs[i].To(),
+				CallData: iter.txs[i].Data(),
+			})
 		}
 
-		to := tx.To(); if to == nil {
-			if len(calls) > 0 {
-				break
-			}
-			err2 := fmt.Errorf("no target address")
-			logger.Error("failed to construct Multicall3Call", err2)
-			return nil, err2
-		}
-
-		newCalls := append(calls, multicall3.Multicall3Call{
-			Target: *tx.To(),
-			CallData: tx.Data(),
-		})
-		multiTx, err := c.multicall3.Aggregate(opts, newCalls)
+		multiTx, err := c.multicall3.Aggregate(opts, calls)
 		if err != nil {
-			if len(calls) > 0 {
-				break
+			if index == from {
+				logger.Error("failed to call Multicall3.Aggregate", err)
+				return nil, err
+			} else {
+				lastNgIndex = index
+				continue L1
 			}
-			logger.Error("failed to call Multicall3.Aggregate", err)
-			return nil, err
 		}
 
 		if rawTxData, err := multiTx.MarshalBinary(); err != nil {
 			logger.Error("failed to encode multiTx", err)
 		} else {
-			saveRawTxData = hex.EncodeToString(rawTxData)
-			logger.Logger = logger.With(logAttrRawTxData, saveRawTxData)
+			lastOkRawTxData = hex.EncodeToString(rawTxData)
+			logger.Logger = logger.With(logAttrRawTxData, lastOkRawTxData)
 		}
 
-		txGasLimit, isBreak, err := estimateGas(ctx, c, multiTx, 0 < len(calls), logger)
+		txGasLimit, isBreak, err := estimateGas(ctx, c, multiTx, from < index, logger)
 		if err != nil {
 			if len(calls) > 0 {
 				break
@@ -603,30 +630,187 @@ func (iter *CallIter) sendMultiTx(ctx context.Context, c *Chain) (*gethtypes.Tra
 			return nil, err
 		}
 		if isBreak { // tx is fail or gas overs limit and 0 < len(calls)
-			break // send txs with last calls
+			lastNgIndex = index
+			break
 		}
 
 		// this calls is ok. save it and try to include next call
-		saveTxGasLimit = txGasLimit
-		calls = newCalls
+		lastOkIndex = index
+		lastOkCalls = calls
+		lastOkGasLimit = txGasLimit
 		iter.Next()
 	}
-	// now len(calls) > 0
 
 	logger = &log.RelayLogger{Logger: logger.With(
 		logAttrMsgIndexFrom, from,
-		logAttrMsgIndexTo, iter.Cursor(),
-		logAttrRawTxData, saveRawTxData,
+		logAttrMsgIndexTo, lastOkIndex,
+		logAttrRawTxData, lastOkRawTxData,
 	)}
 
-	opts.GasLimit = min(saveTxGasLimit, c.Config().MaxGasLimit)
+	opts.GasLimit = min(lastOkGasLimit, c.Config().MaxGasLimit)
 	opts.NoSend = false
-	tx, err := c.multicall3.Aggregate(opts, calls)
+	tx, err := c.multicall3.Aggregate(opts, lastOkCalls)
 	if err != nil {
 		logger.Error("failed to send msg", err)
 		return nil, err
 	}
+	iter.cursor = lastOkIndex + 1
 	return tx, nil
+}
+*/
+
+func (iter *CallIter) sendMultiTx(ctx context.Context, c *Chain) (*gethtypes.Transaction, error) {
+	if (iter.End()) {
+		return nil, nil
+	}
+	// now iter.cursor < len(iter.msgs)
+
+	logger := c.GetChainLogger()
+
+	opts, err := c.TxOpts(ctx, true);
+	if err != nil {
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if iter.txs == nil { // create txs at first multicall call
+		opts.GasLimit = math.MaxUint64
+		opts.NoSend = true
+		txs := make([]gethtypes.Transaction, 0, len(iter.msgs))
+		for i := 0; i < len(iter.msgs); i++ {
+			tx, err := c.SendTx(opts, iter.msgs[i], iter.skipUpdateClientCommitment)
+			if err != nil {
+				logger := &log.RelayLogger{Logger: logger.With(
+					logAttrMsgIndexFrom, i,
+					logAttrMsgIndexTo, i,
+					logAttrMsgType, fmt.Sprintf("%T", iter.msgs[i]),
+				)}
+				logger.Error("failed to build tx for gas estimation", err)
+				return nil, err
+			}
+			if tx.To() == nil {
+				err2 := fmt.Errorf("no target address")
+				logger.Error("failed to construct Multicall3Call", err2)
+				return nil, err2
+			}
+			txs = append(txs, *tx)
+		}
+		iter.txs = txs
+	}
+
+	type Data struct {
+		ctx context.Context
+		c *Chain
+		iter *CallIter
+		opts  *bind.TransactOpts
+		lastOkCalls []multicall3.Multicall3Call
+		lastOkGasLimit uint64
+	}
+
+	data := Data { ctx, c, iter, opts, nil, 0 }
+	count, err := findItems(
+		len(iter.msgs) - iter.Cursor(),
+		&data,
+		func(count int, d *Data) (error) {
+			from := d.iter.Cursor()
+			to := from + count
+
+			logger := &log.RelayLogger{Logger: logger.With(
+				logAttrMsgIndexFrom, from,
+				logAttrMsgIndexTo, from + count,
+				logAttrMsgType, fmt.Sprintf("%T", d.iter.msgs[from + count - 1]),
+			)}
+
+			calls := make([]multicall3.Multicall3Call, 0, count)
+			for i := from; i < to; i++ {
+				calls = append(calls, multicall3.Multicall3Call{
+					Target: *d.iter.txs[i].To(),
+					CallData: d.iter.txs[i].Data(),
+				})
+			}
+
+			d.opts.GasLimit = math.MaxUint64
+			d.opts.NoSend = true
+			multiTx, err := c.multicall3.Aggregate(d.opts, calls)
+			if err != nil {
+				return err
+			}
+
+			txGasLimit, err := estimateGas(ctx, c, multiTx, 1 == count, logger)
+			if err != nil {
+				return err
+			}
+
+			d.lastOkGasLimit = txGasLimit
+			d.lastOkCalls = calls
+			return nil
+		})
+
+	logger = &log.RelayLogger{Logger: logger.With(
+		logAttrMsgIndexFrom, iter.Cursor(),
+		logAttrMsgIndexTo, iter.Cursor() + count,
+		logAttrMsgType, fmt.Sprintf("%T", iter.msgs[iter.Cursor() + count - 1]),
+	)}
+
+	if err != nil {
+		logger.Error("failed to multicall", err)
+		return nil, err
+	}
+
+	opts.GasLimit = min(data.lastOkGasLimit, c.Config().MaxGasLimit)
+	opts.NoSend = false
+	tx, err := c.multicall3.Aggregate(opts, data.lastOkCalls)
+	if err != nil {
+		logger.Error("failed to send multicall tx", err)
+		return nil, err
+	}
+	iter.cursor += count
+	return tx, nil
+}
+
+func findItems[D any](
+	size int,
+	userdata *D,
+	fnTest func(int, *D) (error),
+) (int, error) {
+	if (size <= 0) {
+		return 0, fmt.Errorf("empty items")
+	}
+
+	lastOkCount := 0
+	lastNgCount := 0
+
+	for true {
+		var count int
+
+		if lastNgCount == 0 {
+			count = size
+			if lastOkCount == count {
+				return lastOkCount, nil
+			}
+		} else if lastOkCount == 0 {
+			if lastNgCount == 1 {
+				return 0, fmt.Errorf("not found")
+			}
+			count = lastNgCount / 2 // note that lastNgCount >= 2
+		} else if lastOkCount + 1 == lastNgCount {
+			return lastOkCount, nil
+		} else {
+			count = (lastNgCount + lastOkCount) / 2
+		}
+
+		err := fnTest(count, userdata)
+		if err != nil {
+			if count == 1 {
+				return 0, err
+			}
+			lastNgCount = count
+		} else {
+			lastOkCount = count
+		}
+	}
+	return lastOkCount, nil // not reached
 }
 
 
@@ -634,15 +818,17 @@ func estimateGas(
 	ctx context.Context,
 	c *Chain,
 	tx *gethtypes.Transaction,
-	doBreak bool, // return 0,nil if error or gas is over
+	doRound bool, // return rounded gas limit when gas limit is over
 	logger *log.RelayLogger,
-) (uint64, bool, error) {
+) (uint64, error) {
+	if rawTxData, err := tx.MarshalBinary(); err != nil {
+		logger.Error("failed to encode tx", err)
+	} else {
+		logger.Logger = logger.With(logAttrRawTxData, hex.EncodeToString(rawTxData))
+	}
+
 	estimatedGas, err := c.client.EstimateGasFromTx(ctx, tx)
 	if err != nil {
-		if doBreak {
-			return 0, true, nil
-		}
-
 		if revertReason, rawErrorData, err := c.getRevertReasonFromEstimateGas(err); err != nil {
 			// Raw error data may be available even if revert reason isn't available.
 			logger.Logger = logger.With(logAttrRawErrorData, hex.EncodeToString(rawErrorData))
@@ -655,21 +841,22 @@ func estimateGas(
 		}
 
 		logger.Error("failed to estimate gas", err)
-		return 0, false, err
+		return 0, err
 	}
 
 	txGasLimit := estimatedGas * c.Config().GasEstimateRate.Numerator / c.Config().GasEstimateRate.Denominator
 	if txGasLimit > c.Config().MaxGasLimit {
-		if doBreak {
-			return 0, true, nil
+		if !doRound {
+			return 0, fmt.Errorf("estimated gas exceeds max gas limit")
 		}
+
 		logger.Warn("estimated gas exceeds max gas limit",
 			logAttrEstimatedGas, txGasLimit,
 			logAttrMaxGasLimit, c.Config().MaxGasLimit,
 		)
-		return c.Config().MaxGasLimit, false, nil
+		return c.Config().MaxGasLimit, nil
 	}
 
-	return txGasLimit, false, nil
+	return txGasLimit, nil
 }
 
