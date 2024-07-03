@@ -195,7 +195,8 @@ func (c *Chain) QueryClientConsensusState(ctx core.QueryContext, dstClientConsHe
 	defer logger.TimeTrack(time.Now(), "QueryClientConsensusState")
 	s, found, err := c.ibcHandler.GetConsensusState(c.callOptsFromQueryContext(ctx), c.pathEnd.ClientID, pbToHostHeight(dstClientConsHeight))
 	if err != nil {
-		logger.Error("failed to get consensus state", err)
+		revertReason, data := c.parseRpcError(err)
+		logger.Error("failed to get consensus state", err, logAttrRevertReason, revertReason, logAttrRawErrorData, data)
 		return nil, err
 	} else if !found {
 		logger.Error("client consensus not found", errors.New("client consensus not found"))
@@ -221,7 +222,8 @@ func (c *Chain) QueryClientState(ctx core.QueryContext) (*clienttypes.QueryClien
 	defer logger.TimeTrack(time.Now(), "QueryClientState")
 	s, found, err := c.ibcHandler.GetClientState(c.callOptsFromQueryContext(ctx), c.pathEnd.ClientID)
 	if err != nil {
-		logger.Error("failed to get client state", err)
+		revertReason, data := c.parseRpcError(err)
+		logger.Error("failed to get client state", err, logAttrRevertReason, revertReason, logAttrRawErrorData, data)
 		return nil, err
 	} else if !found {
 		logger.Error("client not found", errors.New("client not found"))
@@ -262,7 +264,8 @@ func (c *Chain) QueryConnection(ctx core.QueryContext) (*conntypes.QueryConnecti
 	defer logger.TimeTrack(time.Now(), "QueryConnection")
 	conn, found, err := c.ibcHandler.GetConnection(c.callOptsFromQueryContext(ctx), c.pathEnd.ConnectionID)
 	if err != nil {
-		logger.Error("failed to get connection", err)
+		revertReason, data := c.parseRpcError(err)
+		logger.Error("failed to get connection", err, logAttrRevertReason, revertReason, logAttrRawErrorData, data)
 		return nil, err
 	} else if !found {
 		return emptyConnRes, nil
@@ -291,7 +294,8 @@ func (c *Chain) QueryChannel(ctx core.QueryContext) (chanRes *chantypes.QueryCha
 	defer logger.TimeTrack(time.Now(), "QueryChannel")
 	chann, found, err := c.ibcHandler.GetChannel(c.callOptsFromQueryContext(ctx), c.pathEnd.PortID, c.pathEnd.ChannelID)
 	if err != nil {
-		logger.Error("failed to get channel", err)
+		revertReason, data := c.parseRpcError(err)
+		logger.Error("failed to get channel", err, logAttrRevertReason, revertReason, logAttrRawErrorData, data)
 		return nil, err
 	} else if !found {
 		return emptyChannelRes, nil
@@ -313,7 +317,8 @@ func (c *Chain) QueryUnreceivedPackets(ctx core.QueryContext, seqs []uint64) ([]
 		switch c.Path().GetOrder() {
 		case chantypes.UNORDERED:
 			if rc, err := c.ibcHandler.GetPacketReceipt(c.callOptsFromQueryContext(ctx), c.pathEnd.PortID, c.pathEnd.ChannelID, seq); err != nil {
-				logger.Error("failed to get packet receipt", err)
+				revertReason, data := c.parseRpcError(err)
+				logger.Error("failed to get packet receipt", err, logAttrRevertReason, revertReason, logAttrRawErrorData, data)
 				return nil, err
 			} else if rc == PACKET_RECEIPT_SUCCESSFUL {
 				received = true
@@ -327,7 +332,8 @@ func (c *Chain) QueryUnreceivedPackets(ctx core.QueryContext, seqs []uint64) ([]
 				// queried only once
 				nextSequenceRecv, err = c.ibcHandler.GetNextSequenceRecv(c.callOptsFromQueryContext(ctx), c.pathEnd.PortID, c.pathEnd.ChannelID)
 				if err != nil {
-					logger.Error("failed to get nextSequenceRecv", err)
+					revertReason, data := c.parseRpcError(err)
+					logger.Error("failed to get nextSequenceRecv", err, logAttrRevertReason, revertReason, logAttrRawErrorData, data)
 					return nil, err
 				}
 			}
@@ -397,7 +403,8 @@ func (c *Chain) QueryUnreceivedAcknowledgements(ctx core.QueryContext, seqs []ui
 		key := crypto.Keccak256Hash(host.PacketCommitmentKey(c.pathEnd.PortID, c.pathEnd.ChannelID, seq))
 		commitment, err := c.ibcHandler.GetCommitment(c.callOptsFromQueryContext(ctx), key)
 		if err != nil {
-			logger.Error("failed to get hashed packet commitment", err)
+			revertReason, data := c.parseRpcError(err)
+			logger.Error("failed to get hashed packet commitment", err, logAttrRevertReason, revertReason, logAttrRawErrorData, data)
 			return nil, err
 		} else if commitment != [32]byte{} {
 			ret = append(ret, seq)

@@ -70,25 +70,29 @@ func (c *Chain) parseMsgEventLogs(logs []*types.Log) ([]core.MsgEventLog, error)
 		case abiGeneratedClientIdentifier.ID:
 			ev, err := c.ibcHandler.ParseGeneratedClientIdentifier(*log)
 			if err != nil {
-				return nil, fmt.Errorf("failed to parse GeneratedClientIdentifier event: logIndex=%d, log=%v", i, log)
+				revertReason, data := c.parseRpcError(err)
+				return nil, fmt.Errorf("failed to parse GeneratedClientIdentifier event: logIndex=%d, log=%v, reason=%s, data=%s", i, log, revertReason, data)
 			}
 			event = &core.EventGenerateClientIdentifier{ID: ev.ClientId}
 		case abiGeneratedConnectionIdentifier.ID:
 			ev, err := c.ibcHandler.ParseGeneratedConnectionIdentifier(*log)
 			if err != nil {
-				return nil, fmt.Errorf("failed to parse GeneratedConnectionIdentifier event: logIndex=%d, log=%v", i, log)
+				revertReason, data := c.parseRpcError(err)
+				return nil, fmt.Errorf("failed to parse GeneratedConnectionIdentifier event: logIndex=%d, log=%v, reason=%s, data=%s", i, log, revertReason, data)
 			}
 			event = &core.EventGenerateConnectionIdentifier{ID: ev.ConnectionId}
 		case abiGeneratedChannelIdentifier.ID:
 			ev, err := c.ibcHandler.ParseGeneratedChannelIdentifier(*log)
 			if err != nil {
-				return nil, fmt.Errorf("failed to parse GeneratedChannelIdentifier event: logIndex=%d, log=%v", i, log)
+				revertReason, data := c.parseRpcError(err)
+				return nil, fmt.Errorf("failed to parse GeneratedChannelIdentifier event: logIndex=%d, log=%v, reason=%s, data=%s", i, log, revertReason, data)
 			}
 			event = &core.EventGenerateChannelIdentifier{ID: ev.ChannelId}
 		case abiSendPacket.ID:
 			ev, err := c.ibcHandler.ParseSendPacket(*log)
 			if err != nil {
-				return nil, fmt.Errorf("failed to parse SendPacket event: logIndex=%d, log=%v", i, log)
+				revertReason, data := c.parseRpcError(err)
+				return nil, fmt.Errorf("failed to parse SendPacket event: logIndex=%d, log=%v, reason=%s, data=%s", i, log, revertReason, data)
 			}
 			event = &core.EventSendPacket{
 				Sequence:         ev.Sequence,
@@ -101,7 +105,8 @@ func (c *Chain) parseMsgEventLogs(logs []*types.Log) ([]core.MsgEventLog, error)
 		case abiRecvPacket.ID:
 			ev, err := c.ibcHandler.ParseRecvPacket(*log)
 			if err != nil {
-				return nil, fmt.Errorf("failed to parse RecvPacket event: logIndex=%d, log=%v", i, log)
+				revertReason, data := c.parseRpcError(err)
+				return nil, fmt.Errorf("failed to parse RecvPacket event: logIndex=%d, log=%v, reason=%s, data=%s", i, log, revertReason, data)
 			}
 			event = &core.EventRecvPacket{
 				Sequence:         ev.Packet.Sequence,
@@ -114,7 +119,8 @@ func (c *Chain) parseMsgEventLogs(logs []*types.Log) ([]core.MsgEventLog, error)
 		case abiWriteAcknowledgement.ID:
 			ev, err := c.ibcHandler.ParseWriteAcknowledgement(*log)
 			if err != nil {
-				return nil, fmt.Errorf("failed to parse WriteAcknowledgement event: logIndex=%d, log=%v", i, log)
+				revertReason, data := c.parseRpcError(err)
+				return nil, fmt.Errorf("failed to parse WriteAcknowledgement event: logIndex=%d, log=%v, reason=%s, data=%s", i, log, revertReason, data)
 			}
 			event = &core.EventWriteAcknowledgement{
 				Sequence:        ev.Sequence,
@@ -125,7 +131,8 @@ func (c *Chain) parseMsgEventLogs(logs []*types.Log) ([]core.MsgEventLog, error)
 		case abiAcknowledgePacket.ID:
 			ev, err := c.ibcHandler.ParseAcknowledgePacket(*log)
 			if err != nil {
-				return nil, fmt.Errorf("failed to parse AcknowledgePacket event: logIndex=%d, log=%v", i, log)
+				revertReason, data := c.parseRpcError(err)
+				return nil, fmt.Errorf("failed to parse AcknowledgePacket event: logIndex=%d, log=%v, reason=%s, data=%s", i, log, revertReason, data)
 			}
 			event = &core.EventAcknowledgePacket{
 				Sequence:         ev.Packet.Sequence,
