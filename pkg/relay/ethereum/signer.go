@@ -41,6 +41,10 @@ func NewEthereumSigner(bytesSigner signer.Signer, chainID *big.Int) (*EthereumSi
 	}, nil
 }
 
+func (s *EthereumSigner) GetLogger() (*log.RelayLogger) {
+	return s.logger
+}
+
 func (s *EthereumSigner) SetLogger(logger *log.RelayLogger) {
 	s.logger = logger
 }

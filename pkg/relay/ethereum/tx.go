@@ -34,6 +34,9 @@ func (c *Chain) SendMsgs(msgs []sdk.Msg) ([]core.MsgID, error) {
 		return nil, fmt.Errorf("failed to confirm connection opened: %w", err)
 	}
 	logger := c.GetChainLogger()
+	ethereumSignerLogger := c.ethereumSigner.GetLogger()
+	defer c.ethereumSigner.SetLogger(ethereumSignerLogger)
+
 	var msgIDs []core.MsgID
 	for i, msg := range msgs {
 		logger := &log.RelayLogger{Logger: logger.With(
