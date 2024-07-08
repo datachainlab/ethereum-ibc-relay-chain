@@ -82,8 +82,7 @@ func (chain *Chain) findSentPackets(ctx core.QueryContext, fromHeight uint64) (c
 
 		sendPacket, err := chain.ibcHandler.ParseSendPacket(log)
 		if err != nil {
-			revertReason, data := chain.parseRpcError(err)
-			return nil, fmt.Errorf("failed to parse SendPacket event: err=%v, log=%v, reason=%s, data=%s", err, log, revertReason, data)
+			return nil, fmt.Errorf("failed to parse SendPacket event: err=%v, log=%v", err, log)
 		}
 		if sendPacket.SourceChannel != chain.Path().ChannelID || sendPacket.SourcePort != chain.Path().PortID {
 			continue
@@ -165,8 +164,7 @@ func (chain *Chain) findRecvPacketEvents(ctx core.QueryContext, fromHeight uint6
 	for _, log := range logs {
 		event, err := chain.ibcHandler.ParseRecvPacket(log)
 		if err != nil {
-			revertReason, data := chain.parseRpcError(err)
-			return nil, fmt.Errorf("failed to parse RecvPacket event: err=%v, log=%v, reason%s, data=%s", err, log, revertReason, data)
+			return nil, fmt.Errorf("failed to parse RecvPacket event: err=%v, log=%v", err, log)
 		}
 		if event.Packet.DestinationChannel != chain.Path().ChannelID || event.Packet.DestinationPort != chain.Path().PortID {
 			continue
@@ -186,8 +184,7 @@ func (chain *Chain) findWriteAckEvents(ctx core.QueryContext, fromHeight uint64)
 	for _, log := range logs {
 		event, err := chain.ibcHandler.ParseWriteAcknowledgement(log)
 		if err != nil {
-			revertReason, data := chain.parseRpcError(err)
-			return nil, fmt.Errorf("failed to parse WriteAcknowledgement event: err=%v, log=%v, reason=%s, data=%s", err, log, revertReason, data)
+			return nil, fmt.Errorf("failed to parse WriteAcknowledgement event: err=%v, log=%v", err, log)
 		}
 		if event.DestinationChannel != chain.Path().ChannelID || event.DestinationPortId != chain.Path().PortID {
 			continue
