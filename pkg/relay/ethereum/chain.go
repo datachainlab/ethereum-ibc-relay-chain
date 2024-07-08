@@ -84,7 +84,7 @@ func NewChain(config ChainConfig) (*Chain, error) {
 		multicall3_ = contract
 	}
 
-	signer, err := config.Signer.GetCachedValue().(SignerConfig).Build(big.NewInt(int64(config.EthChainId)))
+	signer, err := config.Signer.GetCachedValue().(signer.SignerConfig).Build()
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to build signer: %v", err)
