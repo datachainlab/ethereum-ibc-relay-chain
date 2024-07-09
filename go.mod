@@ -2,6 +2,8 @@ module github.com/datachainlab/ethereum-ibc-relay-chain
 
 go 1.21
 
+replace github.com/hyperledger-labs/yui-relayer => github.com/siburu/yui-relayer v0.0.0-20240805015353-43c126e44c89
+
 require (
 	github.com/avast/retry-go v3.0.0+incompatible
 	github.com/cosmos/cosmos-sdk v0.50.5
