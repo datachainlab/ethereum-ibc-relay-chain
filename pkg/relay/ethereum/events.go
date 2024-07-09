@@ -9,6 +9,7 @@ import (
 	channeltypes "github.com/cosmos/ibc-go/v8/modules/core/04-channel/types"
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/hyperledger-labs/yui-relayer/core"
@@ -43,7 +44,6 @@ func init() {
 	abiRecvPacket = abiIBCHandler.Events["RecvPacket"]
 	abiWriteAcknowledgement = abiIBCHandler.Events["WriteAcknowledgement"]
 	abiAcknowledgePacket = abiIBCHandler.Events["AcknowledgePacket"]
-
 }
 
 func (chain *Chain) findSentPackets(ctx core.QueryContext, fromHeight uint64) (core.PacketInfoList, error) {
@@ -245,4 +245,45 @@ func (chain *Chain) filterLogs(ctx core.QueryContext, fromHeight uint64, event a
 		logs = append(logs, filterLogs...)
 	}
 	return logs, nil
+}
+
+// findWriteErrorReceipt traverses WriteErrorReceipt events in reverse chronological order and returns the latest one.
+// The start point of the traverse is the height of `ctx`.
+func (chain *Chain) findWriteErrorReceipt(ctx core.QueryContext) (*ibchandler.IbchandlerWriteErrorReceipt, error) {
+	blocks := int64(chain.config.BlocksPerEventQuery)
+	if blocks == 0 {
+		blocks = BlocksPerEventQueryDefault
+	}
+
+	for toBlock := int64(ctx.Height().GetRevisionHeight()); toBlock > 0; toBlock -= blocks {
+		end := uint64(toBlock)
+		start := uint64(1)
+		if toBlock > blocks {
+			start = uint64(toBlock - blocks + 1)
+		}
+		iterator, err := chain.ibcHandler.FilterWriteErrorReceipt(&bind.FilterOpts{
+			Start: start,
+			End:   &end,
+		})
+		if err != nil {
+			return nil, err
+		}
+		var errReceipt *ibchandler.IbchandlerWriteErrorReceipt
+		for iterator.Next() {
+			if iterator.Event.PortId == chain.pathEnd.PortID && iterator.Event.ChannelId == chain.pathEnd.ChannelID {
+				errReceipt = iterator.Event
+			}
+		}
+		if err := iterator.Error(); err != nil {
+			return nil, err
+		}
+		if err := iterator.Close(); err != nil {
+			return nil, err
+		}
+		if errReceipt != nil {
+			return errReceipt, nil
+		}
+	}
+
+	return nil, nil
 }

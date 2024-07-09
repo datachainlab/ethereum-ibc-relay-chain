@@ -1,6 +1,7 @@
 package ethereum
 
 import (
+	clienttypes "github.com/cosmos/ibc-go/v8/modules/core/02-client/types"
 	connectiontypes "github.com/cosmos/ibc-go/v8/modules/core/03-connection/types"
 	channeltypes "github.com/cosmos/ibc-go/v8/modules/core/04-channel/types"
 	commitmenttypes "github.com/cosmos/ibc-go/v8/modules/core/23-commitment/types"
@@ -35,6 +36,21 @@ func channelToPB(chann ibchandler.ChannelData) channeltypes.Channel {
 		ConnectionHops: chann.ConnectionHops,
 		Version:        chann.Version,
 	}
+}
+
+func upgradeToPB(upg ibchandler.UpgradeData) channeltypes.Upgrade {
+	return channeltypes.NewUpgrade(
+		channeltypes.NewUpgradeFields(
+			channeltypes.Order(upg.Fields.Ordering),
+			upg.Fields.ConnectionHops,
+			upg.Fields.Version,
+		),
+		channeltypes.NewTimeout(
+			clienttypes.Height(upg.Timeout.Height),
+			upg.Timeout.Timestamp,
+		),
+		upg.NextSequenceSend,
+	)
 }
 
 func pbToHandlerHeight(height exported.Height) ibchandler.HeightData {
