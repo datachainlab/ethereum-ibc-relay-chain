@@ -1,6 +1,8 @@
 package ethereum
 
 import (
+	"slices"
+
 	clienttypes "github.com/cosmos/ibc-go/v8/modules/core/02-client/types"
 	connectiontypes "github.com/cosmos/ibc-go/v8/modules/core/03-connection/types"
 	channeltypes "github.com/cosmos/ibc-go/v8/modules/core/04-channel/types"
@@ -64,5 +66,39 @@ func pbToHostHeight(height exported.Height) ibchandler.HeightData {
 	return ibchandler.HeightData{
 		RevisionNumber: height.GetRevisionNumber(),
 		RevisionHeight: height.GetRevisionHeight(),
+	}
+}
+
+func pbToUpgradeFields(f channeltypes.UpgradeFields) ibchandler.UpgradeFieldsData {
+	return ibchandler.UpgradeFieldsData{
+		Ordering:       uint8(f.Ordering),
+		ConnectionHops: slices.Clone(f.ConnectionHops),
+		Version:        f.Version,
+	}
+}
+
+func pbToTimeout(t channeltypes.Timeout) ibchandler.TimeoutData {
+	return ibchandler.TimeoutData{
+		Height:    pbToHandlerHeight(t.Height),
+		Timestamp: t.Timestamp,
+	}
+}
+
+func pbToUpgrade(u channeltypes.Upgrade) ibchandler.UpgradeData {
+	return ibchandler.UpgradeData{
+		Fields:           pbToUpgradeFields(u.Fields),
+		Timeout:          pbToTimeout(u.Timeout),
+		NextSequenceSend: u.NextSequenceSend,
+	}
+}
+
+func pbToChannel(c channeltypes.Channel) ibchandler.ChannelData {
+	return ibchandler.ChannelData{
+		State:           uint8(c.State),
+		Ordering:        uint8(c.Ordering),
+		Counterparty:    ibchandler.ChannelCounterpartyData(c.Counterparty),
+		ConnectionHops:  slices.Clone(c.ConnectionHops),
+		Version:         c.Version,
+		UpgradeSequence: c.UpgradeSequence,
 	}
 }

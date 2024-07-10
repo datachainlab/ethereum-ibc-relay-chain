@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	math "math"
+	"slices"
 	"sort"
 	"strings"
 
@@ -352,6 +353,87 @@ func (c *Chain) TxAcknowledgement(opts *bind.TransactOpts, msg *chantypes.MsgAck
 	})
 }
 
+func (c *Chain) TxChannelUpgradeInit(opts *bind.TransactOpts, msg *chantypes.MsgChannelUpgradeInit) (*gethtypes.Transaction, error) {
+	return c.ibcHandler.ChannelUpgradeInit(opts, ibchandler.IIBCChannelUpgradeBaseMsgChannelUpgradeInit{
+		PortId:                c.pathEnd.PortID,
+		ChannelId:             c.pathEnd.ChannelID,
+		ProposedUpgradeFields: pbToUpgradeFields(msg.Fields),
+	})
+}
+
+func (c *Chain) TxChannelUpgradeTry(opts *bind.TransactOpts, msg *chantypes.MsgChannelUpgradeTry) (*gethtypes.Transaction, error) {
+	return c.ibcHandler.ChannelUpgradeTry(opts, ibchandler.IIBCChannelUpgradeBaseMsgChannelUpgradeTry{
+		PortId:                      c.pathEnd.PortID,
+		ChannelId:                   c.pathEnd.ChannelID,
+		CounterpartyUpgradeSequence: msg.CounterpartyUpgradeSequence,
+		CounterpartyUpgradeFields:   pbToUpgradeFields(msg.CounterpartyUpgradeFields),
+		ProposedConnectionHops:      slices.Clone(msg.ProposedUpgradeConnectionHops),
+		Proofs: ibchandler.IIBCChannelUpgradeBaseChannelUpgradeProofs{
+			ProofChannel: msg.ProofChannel,
+			ProofUpgrade: msg.ProofUpgrade,
+			ProofHeight:  pbToHandlerHeight(msg.ProofHeight),
+		},
+	})
+}
+
+func (c *Chain) TxChannelUpgradeAck(opts *bind.TransactOpts, msg *chantypes.MsgChannelUpgradeAck) (*gethtypes.Transaction, error) {
+	return c.ibcHandler.ChannelUpgradeAck(opts, ibchandler.IIBCChannelUpgradeBaseMsgChannelUpgradeAck{
+		PortId:              c.pathEnd.PortID,
+		ChannelId:           c.pathEnd.ChannelID,
+		CounterpartyUpgrade: pbToUpgrade(msg.CounterpartyUpgrade),
+		Proofs: ibchandler.IIBCChannelUpgradeBaseChannelUpgradeProofs{
+			ProofChannel: msg.ProofChannel,
+			ProofUpgrade: msg.ProofUpgrade,
+			ProofHeight:  pbToHandlerHeight(msg.ProofHeight),
+		},
+	})
+}
+
+func (c *Chain) TxChannelUpgradeConfirm(opts *bind.TransactOpts, msg *chantypes.MsgChannelUpgradeConfirm) (*gethtypes.Transaction, error) {
+	return c.ibcHandler.ChannelUpgradeConfirm(opts, ibchandler.IIBCChannelUpgradeBaseMsgChannelUpgradeConfirm{
+		PortId:                   c.pathEnd.PortID,
+		ChannelId:                c.pathEnd.ChannelID,
+		CounterpartyChannelState: uint8(msg.CounterpartyChannelState),
+		CounterpartyUpgrade:      pbToUpgrade(msg.CounterpartyUpgrade),
+		Proofs: ibchandler.IIBCChannelUpgradeBaseChannelUpgradeProofs{
+			ProofChannel: msg.ProofChannel,
+			ProofUpgrade: msg.ProofUpgrade,
+			ProofHeight:  pbToHandlerHeight(msg.ProofHeight),
+		},
+	})
+}
+
+func (c *Chain) TxChannelUpgradeOpen(opts *bind.TransactOpts, msg *chantypes.MsgChannelUpgradeOpen) (*gethtypes.Transaction, error) {
+	return c.ibcHandler.ChannelUpgradeOpen(opts, ibchandler.IIBCChannelUpgradeBaseMsgChannelUpgradeOpen{
+		PortId:                      c.pathEnd.PortID,
+		ChannelId:                   c.pathEnd.ChannelID,
+		CounterpartyChannelState:    uint8(msg.CounterpartyChannelState),
+		CounterpartyUpgradeSequence: msg.CounterpartyUpgradeSequence,
+		ProofChannel:                msg.ProofChannel,
+		ProofHeight:                 pbToHandlerHeight(msg.ProofHeight),
+	})
+}
+
+func (c *Chain) TxChannelUpgradeCancel(opts *bind.TransactOpts, msg *chantypes.MsgChannelUpgradeCancel) (*gethtypes.Transaction, error) {
+	return c.ibcHandler.CancelChannelUpgrade(opts, ibchandler.IIBCChannelUpgradeBaseMsgCancelChannelUpgrade{
+		PortId:            c.pathEnd.PortID,
+		ChannelId:         c.pathEnd.ChannelID,
+		ErrorReceipt:      ibchandler.ErrorReceiptData(msg.ErrorReceipt),
+		ProofUpgradeError: msg.ProofErrorReceipt,
+		ProofHeight:       pbToHandlerHeight(msg.ProofHeight),
+	})
+}
+
+func (c *Chain) TxChannelUpgradeTimeout(opts *bind.TransactOpts, msg *chantypes.MsgChannelUpgradeTimeout) (*gethtypes.Transaction, error) {
+	return c.ibcHandler.TimeoutChannelUpgrade(opts, ibchandler.IIBCChannelUpgradeBaseMsgTimeoutChannelUpgrade{
+		PortId:              c.pathEnd.PortID,
+		ChannelId:           c.pathEnd.ChannelID,
+		CounterpartyChannel: pbToChannel(msg.CounterpartyChannel),
+		ProofChannel:        msg.ProofChannel,
+		ProofHeight:         pbToHandlerHeight(msg.ProofHeight),
+	})
+}
+
 func (c *Chain) BuildMessageTx(opts *bind.TransactOpts, msg sdk.Msg, skipUpdateClientCommitment bool) (*gethtypes.Transaction, error) {
 	logger := c.GetChainLogger()
 	var (
@@ -383,6 +465,20 @@ func (c *Chain) BuildMessageTx(opts *bind.TransactOpts, msg sdk.Msg, skipUpdateC
 		tx, err = c.TxRecvPacket(opts, msg)
 	case *chantypes.MsgAcknowledgement:
 		tx, err = c.TxAcknowledgement(opts, msg)
+	case *chantypes.MsgChannelUpgradeInit:
+		tx, err = c.TxChannelUpgradeInit(opts, msg)
+	case *chantypes.MsgChannelUpgradeTry:
+		tx, err = c.TxChannelUpgradeTry(opts, msg)
+	case *chantypes.MsgChannelUpgradeAck:
+		tx, err = c.TxChannelUpgradeAck(opts, msg)
+	case *chantypes.MsgChannelUpgradeConfirm:
+		tx, err = c.TxChannelUpgradeConfirm(opts, msg)
+	case *chantypes.MsgChannelUpgradeOpen:
+		tx, err = c.TxChannelUpgradeOpen(opts, msg)
+	case *chantypes.MsgChannelUpgradeCancel:
+		tx, err = c.TxChannelUpgradeCancel(opts, msg)
+	case *chantypes.MsgChannelUpgradeTimeout:
+		tx, err = c.TxChannelUpgradeTimeout(opts, msg)
 	// case *transfertypes.MsgTransfer:
 	// 	err = c.client.transfer(msg)
 	default:
