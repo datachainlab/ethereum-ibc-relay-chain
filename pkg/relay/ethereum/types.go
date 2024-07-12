@@ -32,11 +32,12 @@ func connectionEndToPB(conn ibchandler.ConnectionEndData) connectiontypes.Connec
 
 func channelToPB(chann ibchandler.ChannelData) channeltypes.Channel {
 	return channeltypes.Channel{
-		State:          channeltypes.State(chann.State),
-		Ordering:       channeltypes.Order(chann.Ordering),
-		Counterparty:   channeltypes.Counterparty(chann.Counterparty),
-		ConnectionHops: chann.ConnectionHops,
-		Version:        chann.Version,
+		State:           channeltypes.State(chann.State),
+		Ordering:        channeltypes.Order(chann.Ordering),
+		Counterparty:    channeltypes.Counterparty(chann.Counterparty),
+		ConnectionHops:  chann.ConnectionHops,
+		Version:         chann.Version,
+		UpgradeSequence: chann.UpgradeSequence,
 	}
 }
 
