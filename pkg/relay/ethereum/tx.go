@@ -428,6 +428,54 @@ func (c *Chain) parseRpcError(err error) (string, string) {
 	return revertReason, hex.EncodeToString(rawErrorData)
 }
 
+
+func estimateGas(
+	ctx context.Context,
+	c *Chain,
+	tx *gethtypes.Transaction,
+	doRound bool, // return rounded gas limit when gas limit is over
+	logger *log.RelayLogger,
+) (uint64, error) {
+	if rawTxData, err := tx.MarshalBinary(); err != nil {
+		logger.Error("failed to encode tx", err)
+	} else {
+		logger.Logger = logger.With(logAttrRawTxData, hex.EncodeToString(rawTxData))
+	}
+
+	estimatedGas, err := c.client.EstimateGasFromTx(ctx, tx)
+	if err != nil {
+		if revertReason, rawErrorData, err := c.getRevertReasonFromRpcError(err); err != nil {
+			// Raw error data may be available even if revert reason isn't available.
+			logger.Logger = logger.With(logAttrRawErrorData, hex.EncodeToString(rawErrorData))
+			logger.Error("failed to get revert reason", err)
+		} else {
+			logger.Logger = logger.With(
+				logAttrRawErrorData, hex.EncodeToString(rawErrorData),
+				logAttrRevertReason, revertReason,
+			)
+		}
+
+		logger.Error("failed to estimate gas", err)
+		return 0, err
+	}
+
+	txGasLimit := estimatedGas * c.Config().GasEstimateRate.Numerator / c.Config().GasEstimateRate.Denominator
+	if txGasLimit > c.Config().MaxGasLimit {
+		if !doRound {
+			return 0, fmt.Errorf("estimated gas exceeds max gas limit")
+		}
+
+		logger.Warn("estimated gas exceeds max gas limit",
+			logAttrEstimatedGas, txGasLimit,
+			logAttrMaxGasLimit, c.Config().MaxGasLimit,
+		)
+		return c.Config().MaxGasLimit, nil
+	}
+
+	return txGasLimit, nil
+}
+
+
 type CallIter struct {
 	msgs []sdk.Msg
 	txs []gethtypes.Transaction
@@ -499,8 +547,6 @@ func (iter *CallIter) sendSingleTx(ctx context.Context, c *Chain) (*gethtypes.Tr
 
 		txGasLimit, err := estimateGas(ctx, c, tx, true, logger)
 		if err != nil {
-			revertReason, data := c.parseRpcError(err)
-			logger.Error("failed to estimate gas", err, logAttrRevertReason, revertReason, logAttrRawErrorData, data)
 			return nil, err
 		}
 		opts.GasLimit = txGasLimit
@@ -668,52 +714,5 @@ func findItems[D any](
 		}
 	}
 	return lastOkCount, nil // not reached
-}
-
-
-func estimateGas(
-	ctx context.Context,
-	c *Chain,
-	tx *gethtypes.Transaction,
-	doRound bool, // return rounded gas limit when gas limit is over
-	logger *log.RelayLogger,
-) (uint64, error) {
-	if rawTxData, err := tx.MarshalBinary(); err != nil {
-		logger.Error("failed to encode tx", err)
-	} else {
-		logger.Logger = logger.With(logAttrRawTxData, hex.EncodeToString(rawTxData))
-	}
-
-	estimatedGas, err := c.client.EstimateGasFromTx(ctx, tx)
-	if err != nil {
-		if revertReason, rawErrorData, err := c.getRevertReasonFromEstimateGas(err); err != nil {
-			// Raw error data may be available even if revert reason isn't available.
-			logger.Logger = logger.With(logAttrRawErrorData, hex.EncodeToString(rawErrorData))
-			logger.Error("failed to get revert reason", err)
-		} else {
-			logger.Logger = logger.With(
-				logAttrRawErrorData, hex.EncodeToString(rawErrorData),
-				logAttrRevertReason, revertReason,
-			)
-		}
-
-		logger.Error("failed to estimate gas", err)
-		return 0, err
-	}
-
-	txGasLimit := estimatedGas * c.Config().GasEstimateRate.Numerator / c.Config().GasEstimateRate.Denominator
-	if txGasLimit > c.Config().MaxGasLimit {
-		if !doRound {
-			return 0, fmt.Errorf("estimated gas exceeds max gas limit")
-		}
-
-		logger.Warn("estimated gas exceeds max gas limit",
-			logAttrEstimatedGas, txGasLimit,
-			logAttrMaxGasLimit, c.Config().MaxGasLimit,
-		)
-		return c.Config().MaxGasLimit, nil
-	}
-
-	return txGasLimit, nil
 }
 
