@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"sort"
 	math "math"
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
@@ -602,40 +603,33 @@ func (iter *CallIter) sendMultiTx(ctx context.Context, c *Chain) (*gethtypes.Tra
 		iter.txs = txs
 	}
 
-	type Data struct {
-		ctx context.Context
-		c *Chain
-		iter *CallIter
-		opts  *bind.TransactOpts
-		lastOkCalls []multicall3.Multicall3Call
-		lastOkGasLimit uint64
-	}
-
-	data := Data { ctx, c, iter, opts, nil, 0 }
+	var (
+		lastOkCalls []multicall3.Multicall3Call = nil
+		lastOkGasLimit uint64 = 0
+	)
 	count, err := findItems(
 		len(iter.msgs) - iter.Cursor(),
-		&data,
-		func(count int, d *Data) (error) {
-			from := d.iter.Cursor()
+		func(count int) (error) {
+			from := iter.Cursor()
 			to := from + count
 
 			logger := &log.RelayLogger{Logger: logger.With(
 				logAttrMsgIndexFrom, from,
 				logAttrMsgIndexTo, from + count,
-				logAttrMsgType, fmt.Sprintf("%T", d.iter.msgs[from + count - 1]),
+				logAttrMsgType, fmt.Sprintf("%T", iter.msgs[from + count - 1]),
 			)}
 
 			calls := make([]multicall3.Multicall3Call, 0, count)
 			for i := from; i < to; i++ {
 				calls = append(calls, multicall3.Multicall3Call{
-					Target: *d.iter.txs[i].To(),
-					CallData: d.iter.txs[i].Data(),
+					Target: *iter.txs[i].To(),
+					CallData: iter.txs[i].Data(),
 				})
 			}
 
-			d.opts.GasLimit = math.MaxUint64
-			d.opts.NoSend = true
-			multiTx, err := c.multicall3.Aggregate(d.opts, calls)
+			opts.GasLimit = math.MaxUint64
+			opts.NoSend = true
+			multiTx, err := c.multicall3.Aggregate(opts, calls)
 			if err != nil {
 				return err
 			}
@@ -645,8 +639,8 @@ func (iter *CallIter) sendMultiTx(ctx context.Context, c *Chain) (*gethtypes.Tra
 				return err
 			}
 
-			d.lastOkGasLimit = txGasLimit
-			d.lastOkCalls = calls
+			lastOkGasLimit = txGasLimit
+			lastOkCalls = calls
 			return nil
 		})
 
@@ -661,9 +655,9 @@ func (iter *CallIter) sendMultiTx(ctx context.Context, c *Chain) (*gethtypes.Tra
 		return nil, err
 	}
 
-	opts.GasLimit = min(data.lastOkGasLimit, c.Config().MaxGasLimit)
+	opts.GasLimit = min(lastOkGasLimit, c.Config().MaxGasLimit)
 	opts.NoSend = false
-	tx, err := c.multicall3.Aggregate(opts, data.lastOkCalls)
+	tx, err := c.multicall3.Aggregate(opts, lastOkCalls)
 	if err != nil {
 		logger.Error("failed to send multicall tx", err)
 		return nil, err
@@ -672,47 +666,23 @@ func (iter *CallIter) sendMultiTx(ctx context.Context, c *Chain) (*gethtypes.Tra
 	return tx, nil
 }
 
-func findItems[D any](
+func findItems(
 	size int,
-	userdata *D,
-	fnTest func(int, *D) (error),
+	f func(int) (error),
 ) (int, error) {
 	if (size <= 0) {
 		return 0, fmt.Errorf("empty items")
 	}
 
-	lastOkCount := 0
-	lastNgCount := 0
-
-	for true {
-		var count int
-
-		if lastNgCount == 0 {
-			count = size
-			if lastOkCount == count {
-				return lastOkCount, nil
-			}
-		} else if lastOkCount == 0 {
-			if lastNgCount == 1 {
-				return 0, fmt.Errorf("not found")
-			}
-			count = lastNgCount / 2 // note that lastNgCount >= 2
-		} else if lastOkCount + 1 == lastNgCount {
-			return lastOkCount, nil
-		} else {
-			count = (lastNgCount + lastOkCount) / 2
-		}
-
-		err := fnTest(count, userdata)
-		if err != nil {
-			if count == 1 {
-				return 0, err
-			}
-			lastNgCount = count
-		} else {
-			lastOkCount = count
-		}
+	// hot path
+	if err := f(size); err == nil {
+		return size, nil
 	}
-	return lastOkCount, nil // not reached
+	// binary search
+	if i := sort.Search(size-1, func(n int) bool { return f(n+1) != nil }); i == 0 {
+		return 0, fmt.Errorf("not found")
+	} else {
+		return i, nil
+	}
 }
 
