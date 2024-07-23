@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 	math "math"
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
@@ -48,7 +49,7 @@ func (c *Chain) SendMsgs(msgs []sdk.Msg) ([]core.MsgID, error) {
 		c.ethereumSigner.SetLogger(logger);
 
 		tx, err := iter.SendTx(ctx, c)
-		logger.Logger = logger.With(logAttrMsgIndexTo, iter.Cursor())
+		logger.Logger = logger.With(logAttrMsgIndexTo, iter.Cursor() -1)
 
 		if err != nil {
 			logger.Error("failed to send msg", err)
@@ -435,8 +436,10 @@ func estimateGas(
 	c *Chain,
 	tx *gethtypes.Transaction,
 	doRound bool, // return rounded gas limit when gas limit is over
-	logger *log.RelayLogger,
+	base_logger *log.RelayLogger,
 ) (uint64, error) {
+	logger := &log.RelayLogger{ Logger: base_logger.Logger }
+
 	if rawTxData, err := tx.MarshalBinary(); err != nil {
 		logger.Error("failed to encode tx", err)
 	} else {
@@ -479,9 +482,11 @@ func estimateGas(
 
 type CallIter struct {
 	msgs []sdk.Msg
-	txs []gethtypes.Transaction
 	cursor int
 	skipUpdateClientCommitment bool
+	// for multicall
+	txs []gethtypes.Transaction
+	msgTypeNames []string
 }
 func NewCallIter(msgs []sdk.Msg, skipUpdateClientCommitment bool) CallIter {
 	return CallIter {
@@ -499,12 +504,10 @@ func (iter *CallIter) Current() *sdk.Msg {
 func (iter *CallIter) End() bool {
 	return len(iter.msgs) <= iter.cursor
 }
-func (iter *CallIter) Next() bool {
-	if iter.End() {
-		return false
+func (iter *CallIter) Next() {
+	if !iter.End() {
+		iter.cursor += 1
 	}
-	iter.cursor += 1
-	return true
 }
 
 func (iter *CallIter) SendTx(ctx context.Context, c *Chain) (*gethtypes.Transaction, error) {
@@ -523,21 +526,16 @@ func (iter *CallIter) sendSingleTx(ctx context.Context, c *Chain) (*gethtypes.Tr
 	logger := c.GetChainLogger()
 	logger = &log.RelayLogger{Logger: logger.With(
 		logAttrMsgIndexFrom, iter.Cursor(),
-		logAttrMsgIndexTo, iter.Cursor(),
 		logAttrMsgType, fmt.Sprintf("%T", *iter.Current()),
 	)}
 
 	opts, err := c.TxOpts(ctx, true);
 	if err != nil {
-		if err != nil {
-			return nil, err
-		}
+		return nil, err
 	}
 
 	// gas estimation
 	{
-		logger := &log.RelayLogger{Logger: logger.Logger}
-
 		opts.GasLimit = math.MaxUint64
 		opts.NoSend = true
 		tx, err := c.SendTx(opts, *iter.Current(), iter.skipUpdateClientCommitment)
@@ -582,13 +580,18 @@ func (iter *CallIter) sendMultiTx(ctx context.Context, c *Chain) (*gethtypes.Tra
 		opts.GasLimit = math.MaxUint64
 		opts.NoSend = true
 		txs := make([]gethtypes.Transaction, 0, len(iter.msgs))
+		msgTypeNames := make([]string, 0, len(iter.msgs))
+
 		for i := 0; i < len(iter.msgs); i++ {
+			msgTypeName := fmt.Sprintf("%T", iter.msgs[i])
+			msgTypeNames = append(msgTypeNames, msgTypeName)
+
 			tx, err := c.SendTx(opts, iter.msgs[i], iter.skipUpdateClientCommitment)
 			if err != nil {
 				logger := &log.RelayLogger{Logger: logger.With(
 					logAttrMsgIndexFrom, i,
 					logAttrMsgIndexTo, i,
-					logAttrMsgType, fmt.Sprintf("%T", iter.msgs[i]),
+					logAttrMsgType, msgTypeName,
 				)}
 				logger.Error("failed to build tx for gas estimation", err)
 				return nil, err
@@ -601,6 +604,7 @@ func (iter *CallIter) sendMultiTx(ctx context.Context, c *Chain) (*gethtypes.Tra
 			txs = append(txs, *tx)
 		}
 		iter.txs = txs
+		iter.msgTypeNames = msgTypeNames
 	}
 
 	var (
@@ -615,8 +619,8 @@ func (iter *CallIter) sendMultiTx(ctx context.Context, c *Chain) (*gethtypes.Tra
 
 			logger := &log.RelayLogger{Logger: logger.With(
 				logAttrMsgIndexFrom, from,
-				logAttrMsgIndexTo, from + count,
-				logAttrMsgType, fmt.Sprintf("%T", iter.msgs[from + count - 1]),
+				logAttrMsgIndexTo, from + count - 1,
+				logAttrMsgType, strings.Join(iter.msgTypeNames[0 : from + count], ","),
 			)}
 
 			calls := make([]multicall3.Multicall3Call, 0, count)
@@ -646,8 +650,8 @@ func (iter *CallIter) sendMultiTx(ctx context.Context, c *Chain) (*gethtypes.Tra
 
 	logger = &log.RelayLogger{Logger: logger.With(
 		logAttrMsgIndexFrom, iter.Cursor(),
-		logAttrMsgIndexTo, iter.Cursor() + count,
-		logAttrMsgType, fmt.Sprintf("%T", iter.msgs[iter.Cursor() + count - 1]),
+		logAttrMsgIndexTo, iter.Cursor() + count - 1,
+		logAttrMsgType, strings.Join(iter.msgTypeNames[0 : iter.Cursor() + count], ","),
 	)}
 
 	if err != nil {
@@ -662,6 +666,7 @@ func (iter *CallIter) sendMultiTx(ctx context.Context, c *Chain) (*gethtypes.Tra
 		logger.Error("failed to send multicall tx", err)
 		return nil, err
 	}
+	logger.Info("succeeded in sending multicall")
 	iter.cursor += count
 	return tx, nil
 }
