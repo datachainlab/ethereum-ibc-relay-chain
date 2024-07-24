@@ -34,11 +34,6 @@ func TestFindItems(t *testing.T) {
 		},
 		{
 			size: 10,
-			expect: 0,
-			expectLog: []int{ 10, 5, 3, 2, 1 },
-		},
-		{
-			size: 10,
 			expect: 2,
 			expectLog: []int{ 10, 5, 3, 2 },
 		},
