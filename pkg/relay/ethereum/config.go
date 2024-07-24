@@ -43,6 +43,9 @@ func (c ChainConfig) Validate() error {
 	if isEmpty(c.IbcAddress) {
 		errs = append(errs, fmt.Errorf("config attribute \"ibc_address\" is empty"))
 	}
+	if !isEmpty(c.Multicall3Address) && !common.IsHexAddress(c.Multicall3Address) {
+		errs = append(errs, fmt.Errorf("config attribute \"multicall3_address\" should be empty or hex address"))
+	}
 	if c.AverageBlockTimeMsec == 0 {
 		errs = append(errs, fmt.Errorf("config attribute \"average_block_time_msec\" is zero"))
 	}
@@ -110,6 +113,10 @@ func (c ChainConfig) UnpackInterfaces(unpacker codectypes.AnyUnpacker) error {
 
 func (c ChainConfig) IBCAddress() common.Address {
 	return common.HexToAddress(c.IbcAddress)
+}
+
+func (c ChainConfig) Multicall3AddressAsAddress() common.Address {
+	return common.HexToAddress(c.Multicall3Address)
 }
 
 func (alf AllowLCFunctionsConfig) ValidateBasic() error {

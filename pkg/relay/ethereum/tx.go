@@ -5,6 +5,8 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"sort"
+	"strings"
 	math "math"
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
@@ -23,6 +25,7 @@ import (
 
 	"github.com/datachainlab/ethereum-ibc-relay-chain/pkg/client"
 	"github.com/datachainlab/ethereum-ibc-relay-chain/pkg/contract/ibchandler"
+	"github.com/datachainlab/ethereum-ibc-relay-chain/pkg/contract/multicall3"
 )
 
 // SendMsgs sends msgs to the chain
@@ -38,59 +41,21 @@ func (c *Chain) SendMsgs(msgs []sdk.Msg) ([]core.MsgID, error) {
 	defer c.ethereumSigner.SetLogger(ethereumSignerLogger)
 
 	var msgIDs []core.MsgID
-	for i, msg := range msgs {
-		logger := &log.RelayLogger{Logger: logger.With(
-			logAttrMsgIndex, i,
-			logAttrMsgType, fmt.Sprintf("%T", msg),
-		)}
 
-		opts, err := c.TxOpts(ctx, true)
-		if err != nil {
-			return nil, err
-		}
+	iter := NewCallIter(msgs, skipUpdateClientCommitment)
+	for !iter.End() {
+		from := iter.Cursor()
+		logger := &log.RelayLogger{Logger: logger.With(logAttrMsgIndexFrom, from)}
 		c.ethereumSigner.SetLogger(logger);
 
-		// gas estimation
-		{
-			logger := &log.RelayLogger{Logger: logger.Logger}
+		tx, err := iter.SendTx(ctx, c)
+		logger.Logger = logger.With(logAttrMsgIndexTo, iter.Cursor() -1)
 
-			opts.GasLimit = math.MaxUint64
-			opts.NoSend = true
-			tx, err := c.SendTx(opts, msg, skipUpdateClientCommitment)
-			if err != nil {
-				logger.Error("failed to build tx for gas estimation", err)
-				return nil, err
-			}
-
-			if rawTxData, err := tx.MarshalBinary(); err != nil {
-				logger.Error("failed to encode tx", err)
-			} else {
-				logger.Logger = logger.With(logAttrRawTxData, hex.EncodeToString(rawTxData))
-			}
-
-			estimatedGas, err := c.client.EstimateGasFromTx(ctx, tx)
-			if err != nil {
-				revertReason, data := c.parseRpcError(err)
-				logger.Error("failed to estimate gas", err, logAttrRevertReason, revertReason, logAttrRawErrorData, data)
-				return nil, err
-			}
-
-			txGasLimit := estimatedGas * c.Config().GasEstimateRate.Numerator / c.Config().GasEstimateRate.Denominator
-			if txGasLimit > c.Config().MaxGasLimit {
-				logger.Warn("estimated gas exceeds max gas limit",
-					logAttrEstimatedGas, txGasLimit,
-					logAttrMaxGasLimit, c.Config().MaxGasLimit,
-				)
-				txGasLimit = c.Config().MaxGasLimit
-			}
-			opts.GasLimit = txGasLimit
-		}
-
-		opts.NoSend = false
-		tx, err := c.SendTx(opts, msg, skipUpdateClientCommitment)
 		if err != nil {
 			logger.Error("failed to send msg", err)
 			return nil, err
+		} else if tx == nil {
+			break
 		} else {
 			logger.Logger = logger.With(logAttrTxHash, tx.Hash())
 		}
@@ -131,11 +96,15 @@ func (c *Chain) SendMsgs(msgs []sdk.Msg) ([]core.MsgID, error) {
 		}
 		logger.Info("successfully sent tx")
 		if c.msgEventListener != nil {
-			if err := c.msgEventListener.OnSentMsg([]sdk.Msg{msg}); err != nil {
-				logger.Error("failed to OnSendMsg call", err)
+			for i := from; i < iter.Cursor(); i++ {
+				if err := c.msgEventListener.OnSentMsg([]sdk.Msg{msgs[i]}); err != nil {
+					logger.Error("failed to OnSendMsg call", err, "index", i)
+				}
 			}
 		}
-		msgIDs = append(msgIDs, NewMsgID(tx.Hash()))
+		for i := from; i < iter.Cursor(); i++ {
+			msgIDs = append(msgIDs, NewMsgID(tx.Hash()))
+		}
 	}
 	return msgIDs, nil
 }
@@ -460,3 +429,265 @@ func (c *Chain) parseRpcError(err error) (string, string) {
 	// Note that Raw error data may be available even if revert reason isn't available.
 	return revertReason, hex.EncodeToString(rawErrorData)
 }
+
+
+func estimateGas(
+	ctx context.Context,
+	c *Chain,
+	tx *gethtypes.Transaction,
+	doRound bool, // return rounded gas limit when gas limit is over
+	base_logger *log.RelayLogger,
+) (uint64, error) {
+	logger := &log.RelayLogger{ Logger: base_logger.Logger }
+
+	if rawTxData, err := tx.MarshalBinary(); err != nil {
+		logger.Error("failed to encode tx", err)
+	} else {
+		logger.Logger = logger.With(logAttrRawTxData, hex.EncodeToString(rawTxData))
+	}
+
+	estimatedGas, err := c.client.EstimateGasFromTx(ctx, tx)
+	if err != nil {
+		if revertReason, rawErrorData, err := c.getRevertReasonFromRpcError(err); err != nil {
+			// Raw error data may be available even if revert reason isn't available.
+			logger.Logger = logger.With(logAttrRawErrorData, hex.EncodeToString(rawErrorData))
+			logger.Error("failed to get revert reason", err)
+		} else {
+			logger.Logger = logger.With(
+				logAttrRawErrorData, hex.EncodeToString(rawErrorData),
+				logAttrRevertReason, revertReason,
+			)
+		}
+
+		logger.Error("failed to estimate gas", err)
+		return 0, err
+	}
+
+	txGasLimit := estimatedGas * c.Config().GasEstimateRate.Numerator / c.Config().GasEstimateRate.Denominator
+	if txGasLimit > c.Config().MaxGasLimit {
+		if !doRound {
+			return 0, fmt.Errorf("estimated gas exceeds max gas limit")
+		}
+
+		logger.Warn("estimated gas exceeds max gas limit",
+			logAttrEstimatedGas, txGasLimit,
+			logAttrMaxGasLimit, c.Config().MaxGasLimit,
+		)
+		return c.Config().MaxGasLimit, nil
+	}
+
+	return txGasLimit, nil
+}
+
+
+type CallIter struct {
+	msgs []sdk.Msg
+	cursor int
+	skipUpdateClientCommitment bool
+	// for multicall
+	txs []gethtypes.Transaction
+	msgTypeNames []string
+}
+func NewCallIter(msgs []sdk.Msg, skipUpdateClientCommitment bool) CallIter {
+	return CallIter {
+		msgs: msgs,
+		cursor: 0,
+		skipUpdateClientCommitment: skipUpdateClientCommitment,
+	}
+}
+func (iter *CallIter) Cursor() int {
+	return iter.cursor
+}
+func (iter *CallIter) Current() sdk.Msg {
+	return iter.msgs[iter.cursor]
+}
+func (iter *CallIter) End() bool {
+	return len(iter.msgs) <= iter.cursor
+}
+func (iter *CallIter) Next() {
+	if !iter.End() {
+		iter.cursor += 1
+	}
+}
+
+func (iter *CallIter) SendTx(ctx context.Context, c *Chain) (*gethtypes.Transaction, error) {
+	if c.multicall3 == nil {
+		return iter.sendSingleTx(ctx, c)
+	} else {
+		return iter.sendMultiTx(ctx, c)
+	}
+}
+
+func (iter *CallIter) sendSingleTx(ctx context.Context, c *Chain) (*gethtypes.Transaction, error) {
+	if iter.End() {
+		return nil, nil
+	}
+
+	logger := c.GetChainLogger()
+	logger = &log.RelayLogger{Logger: logger.With(
+		logAttrMsgIndexFrom, iter.Cursor(),
+		logAttrMsgType, fmt.Sprintf("%T", iter.Current()),
+	)}
+
+	opts, err := c.TxOpts(ctx, true);
+	if err != nil {
+		return nil, err
+	}
+
+	// gas estimation
+	{
+		opts.GasLimit = math.MaxUint64
+		opts.NoSend = true
+		tx, err := c.SendTx(opts, iter.Current(), iter.skipUpdateClientCommitment)
+		if err != nil {
+			logger.Error("failed to build tx for gas estimation", err)
+			return nil, err
+		}
+
+		txGasLimit, err := estimateGas(ctx, c, tx, true, logger)
+		if err != nil {
+			return nil, err
+		}
+		opts.GasLimit = txGasLimit
+	}
+
+	opts.NoSend = false
+	tx, err := c.SendTx(opts, iter.Current(), iter.skipUpdateClientCommitment)
+	if err != nil {
+		logger.Error("failed to send msg", err)
+		return nil, err
+	}
+	iter.Next()
+	return tx, nil
+}
+
+func (iter *CallIter) sendMultiTx(ctx context.Context, c *Chain) (*gethtypes.Transaction, error) {
+	if (iter.End()) {
+		return nil, nil
+	}
+	// now iter.cursor < len(iter.msgs)
+
+	logger := c.GetChainLogger()
+
+	opts, err := c.TxOpts(ctx, true);
+	if err != nil {
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if iter.txs == nil { // create txs at first multicall call
+		opts.GasLimit = math.MaxUint64
+		opts.NoSend = true
+		txs := make([]gethtypes.Transaction, 0, len(iter.msgs))
+		msgTypeNames := make([]string, 0, len(iter.msgs))
+
+		for i := 0; i < len(iter.msgs); i++ {
+			msgTypeName := fmt.Sprintf("%T", iter.msgs[i])
+			msgTypeNames = append(msgTypeNames, msgTypeName)
+
+			tx, err := c.SendTx(opts, iter.msgs[i], iter.skipUpdateClientCommitment)
+			if err != nil {
+				logger := &log.RelayLogger{Logger: logger.With(
+					logAttrMsgIndexFrom, i,
+					logAttrMsgIndexTo, i,
+					logAttrMsgType, msgTypeName,
+				)}
+				logger.Error("failed to build tx for gas estimation", err)
+				return nil, err
+			}
+			if tx.To() == nil {
+				err2 := fmt.Errorf("no target address")
+				logger.Error("failed to construct Multicall3Call", err2)
+				return nil, err2
+			}
+			txs = append(txs, *tx)
+		}
+		iter.txs = txs
+		iter.msgTypeNames = msgTypeNames
+	}
+
+	var (
+		lastOkCalls []multicall3.Multicall3Call = nil
+		lastOkGasLimit uint64 = 0
+	)
+	count, err := findItems(
+		len(iter.msgs) - iter.Cursor(),
+		func(count int) (error) {
+			from := iter.Cursor()
+			to := from + count
+
+			logger := &log.RelayLogger{Logger: logger.With(
+				logAttrMsgIndexFrom, from,
+				logAttrMsgIndexTo, from + count - 1,
+				logAttrMsgType, strings.Join(iter.msgTypeNames[0 : from + count], ","),
+			)}
+
+			calls := make([]multicall3.Multicall3Call, 0, count)
+			for i := from; i < to; i++ {
+				calls = append(calls, multicall3.Multicall3Call{
+					Target: *iter.txs[i].To(),
+					CallData: iter.txs[i].Data(),
+				})
+			}
+
+			opts.GasLimit = math.MaxUint64
+			opts.NoSend = true
+			multiTx, err := c.multicall3.Aggregate(opts, calls)
+			if err != nil {
+				return err
+			}
+
+			txGasLimit, err := estimateGas(ctx, c, multiTx, 1 == count, logger)
+			if err != nil {
+				return err
+			}
+
+			lastOkGasLimit = txGasLimit
+			lastOkCalls = calls
+			return nil
+		})
+
+	logger = &log.RelayLogger{Logger: logger.With(
+		logAttrMsgIndexFrom, iter.Cursor(),
+		logAttrMsgIndexTo, iter.Cursor() + count - 1,
+		logAttrMsgType, strings.Join(iter.msgTypeNames[0 : iter.Cursor() + count], ","),
+	)}
+
+	if err != nil {
+		logger.Error("failed to prepare multicall tx", err)
+		return nil, err
+	}
+
+	opts.GasLimit = lastOkGasLimit
+	opts.NoSend = false
+	tx, err := c.multicall3.Aggregate(opts, lastOkCalls)
+	if err != nil {
+		logger.Error("failed to send multicall tx", err)
+		return nil, err
+	}
+	logger.Info("succeeded in sending multicall")
+	iter.cursor += count
+	return tx, nil
+}
+
+func findItems(
+	size int,
+	f func(int) (error),
+) (int, error) {
+	if (size <= 0) {
+		return 0, fmt.Errorf("empty items")
+	}
+
+	// hot path
+	if err := f(size); err == nil {
+		return size, nil
+	}
+	// binary search
+	if i := sort.Search(size-1, func(n int) bool { return f(n+1) != nil }); i == 0 {
+		return 0, fmt.Errorf("not found")
+	} else {
+		return i, nil
+	}
+}
+
