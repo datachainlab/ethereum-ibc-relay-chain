@@ -498,8 +498,8 @@ func NewCallIter(msgs []sdk.Msg, skipUpdateClientCommitment bool) CallIter {
 func (iter *CallIter) Cursor() int {
 	return iter.cursor
 }
-func (iter *CallIter) Current() *sdk.Msg {
-	return &iter.msgs[iter.cursor]
+func (iter *CallIter) Current() sdk.Msg {
+	return iter.msgs[iter.cursor]
 }
 func (iter *CallIter) End() bool {
 	return len(iter.msgs) <= iter.cursor
@@ -526,7 +526,7 @@ func (iter *CallIter) sendSingleTx(ctx context.Context, c *Chain) (*gethtypes.Tr
 	logger := c.GetChainLogger()
 	logger = &log.RelayLogger{Logger: logger.With(
 		logAttrMsgIndexFrom, iter.Cursor(),
-		logAttrMsgType, fmt.Sprintf("%T", *iter.Current()),
+		logAttrMsgType, fmt.Sprintf("%T", iter.Current()),
 	)}
 
 	opts, err := c.TxOpts(ctx, true);
@@ -538,7 +538,7 @@ func (iter *CallIter) sendSingleTx(ctx context.Context, c *Chain) (*gethtypes.Tr
 	{
 		opts.GasLimit = math.MaxUint64
 		opts.NoSend = true
-		tx, err := c.SendTx(opts, *iter.Current(), iter.skipUpdateClientCommitment)
+		tx, err := c.SendTx(opts, iter.Current(), iter.skipUpdateClientCommitment)
 		if err != nil {
 			logger.Error("failed to build tx for gas estimation", err)
 			return nil, err
@@ -552,7 +552,7 @@ func (iter *CallIter) sendSingleTx(ctx context.Context, c *Chain) (*gethtypes.Tr
 	}
 
 	opts.NoSend = false
-	tx, err := c.SendTx(opts, *iter.Current(), iter.skipUpdateClientCommitment)
+	tx, err := c.SendTx(opts, iter.Current(), iter.skipUpdateClientCommitment)
 	if err != nil {
 		logger.Error("failed to send msg", err)
 		return nil, err
@@ -655,11 +655,11 @@ func (iter *CallIter) sendMultiTx(ctx context.Context, c *Chain) (*gethtypes.Tra
 	)}
 
 	if err != nil {
-		logger.Error("failed to multicall", err)
+		logger.Error("failed to prepare multicall tx", err)
 		return nil, err
 	}
 
-	opts.GasLimit = min(lastOkGasLimit, c.Config().MaxGasLimit)
+	opts.GasLimit = lastOkGasLimit
 	opts.NoSend = false
 	tx, err := c.multicall3.Aggregate(opts, lastOkCalls)
 	if err != nil {
