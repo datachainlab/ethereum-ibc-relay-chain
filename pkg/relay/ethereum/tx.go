@@ -551,9 +551,25 @@ func (iter *CallIter) sendSingleTx(ctx context.Context, c *Chain) (*gethtypes.Tr
 		opts.GasLimit = txGasLimit
 	}
 
+	// add raw tx to log attribute
+	var hexTx string
+	{
+		tx, err := c.SendTx(opts, iter.Current(), iter.skipUpdateClientCommitment)
+		if err != nil {
+			logger.Error("failed to build tx with real send parameters", err)
+			return nil, err
+		}
+		if rawTxData, err := tx.MarshalBinary(); err != nil {
+			logger.Error("failed to encode tx", err)
+		} else {
+			hexTx = hex.EncodeToString(rawTxData)
+		}
+	}
+
 	opts.NoSend = false
 	tx, err := c.SendTx(opts, iter.Current(), iter.skipUpdateClientCommitment)
 	if err != nil {
+		logger.Logger = logger.With(logAttrRawTxData, hexTx)
 		logger.Error("failed to send msg", err)
 		return nil, err
 	}
@@ -660,9 +676,26 @@ func (iter *CallIter) sendMultiTx(ctx context.Context, c *Chain) (*gethtypes.Tra
 	}
 
 	opts.GasLimit = lastOkGasLimit
+
+	// add raw tx to log attribute
+	var hexTx string
+	{
+		tx, err := c.multicall3.Aggregate(opts, lastOkCalls)
+		if err != nil {
+			logger.Error("failed to build multicall tx with real send parameters", err)
+			return nil, err
+		}
+		if rawTxData, err := tx.MarshalBinary(); err != nil {
+			logger.Error("failed to encode multicall tx", err)
+		} else {
+			hexTx = hex.EncodeToString(rawTxData)
+		}
+	}
+
 	opts.NoSend = false
 	tx, err := c.multicall3.Aggregate(opts, lastOkCalls)
 	if err != nil {
+		logger.Logger = logger.With(logAttrRawTxData, hexTx)
 		logger.Error("failed to send multicall tx", err)
 		return nil, err
 	}
