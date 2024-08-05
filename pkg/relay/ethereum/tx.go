@@ -48,31 +48,31 @@ func (c *Chain) SendMsgs(msgs []sdk.Msg) ([]core.MsgID, error) {
 		logger := &log.RelayLogger{Logger: logger.With(logAttrMsgIndexFrom, from)}
 		c.ethereumSigner.SetLogger(logger);
 
-		tx, count, err := iter.BuildTx(ctx, c)
-		iter.updateLoggerMessageInfo(logger, iter.Cursor(), count)
+		built, err := iter.BuildTx(ctx, c)
 
 		if err != nil {
 			logger.Error("failed to build msg tx", err)
 			return nil, err
-		} else if tx == nil {
+		} else if built == nil {
 			break
 		} else {
-			logger.Logger = logger.With(logAttrTxHash, tx.Hash())
+			iter.updateLoggerMessageInfo(logger, from, built.count)
+			logger.Logger = logger.With(logAttrTxHash, built.tx.Hash())
 		}
 
-		if rawTxData, err := tx.MarshalBinary(); err != nil {
+		if rawTxData, err := built.tx.MarshalBinary(); err != nil {
 			logger.Error("failed to encode tx", err)
 		} else {
 			logger.Logger = logger.With(logAttrRawTxData, hex.EncodeToString(rawTxData))
 		}
 
-		err = c.client.SendTransaction(ctx, tx)
+		err = c.client.SendTransaction(ctx, built.tx)
 		if err != nil {
 			logger.Error("failed to send tx", err)
 			return nil, err
 		}
 
-		receipt, err := c.client.WaitForReceiptAndGet(ctx, tx.Hash())
+		receipt, err := c.client.WaitForReceiptAndGet(ctx, built.tx.Hash())
 		if err != nil {
 			logger.Error("failed to get receipt", err)
 			return nil, err
@@ -108,10 +108,10 @@ func (c *Chain) SendMsgs(msgs []sdk.Msg) ([]core.MsgID, error) {
 				}
 			}
 		}
-		for i := 0; i < count; i++ {
-			msgIDs = append(msgIDs, NewMsgID(tx.Hash()))
+		for i := 0; i < built.count; i++ {
+			msgIDs = append(msgIDs, NewMsgID(built.tx.Hash()))
 		}
-		iter.Next(count);
+		iter.Next(built.count);
 	}
 	return msgIDs, nil
 }
@@ -531,11 +531,15 @@ func (iter *CallIter) updateLoggerMessageInfo(logger *log.RelayLogger, from int,
 	logger.Logger = logger.With(
 		logAttrMsgIndexFrom, from,
 		logAttrMsgCount, count,
-		logAttrMsgType, strings.Join(iter.msgTypeNames[0 : from + count], ","),
+		logAttrMsgType, strings.Join(iter.msgTypeNames[from : from + count], ","),
 	)
 }
 
-func (iter *CallIter) BuildTx(ctx context.Context, c *Chain) (*gethtypes.Transaction, int, error) {
+type CallIterBuildResult struct {
+	tx *gethtypes.Transaction
+	count int
+}
+func (iter *CallIter) BuildTx(ctx context.Context, c *Chain) (*CallIterBuildResult, error) {
 	if c.multicall3 == nil {
 		return iter.buildSingleTx(ctx, c)
 	} else {
@@ -543,9 +547,9 @@ func (iter *CallIter) BuildTx(ctx context.Context, c *Chain) (*gethtypes.Transac
 	}
 }
 
-func (iter *CallIter) buildSingleTx(ctx context.Context, c *Chain) (*gethtypes.Transaction, int, error) {
+func (iter *CallIter) buildSingleTx(ctx context.Context, c *Chain) (*CallIterBuildResult, error) {
 	if iter.End() {
-		return nil, 0, nil
+		return nil, nil
 	}
 
 	logger := c.GetChainLogger()
@@ -553,22 +557,22 @@ func (iter *CallIter) buildSingleTx(ctx context.Context, c *Chain) (*gethtypes.T
 
 	opts, err := c.TxOpts(ctx, true);
 	if err != nil {
-		return nil, 0, err
+		return nil, err
 	}
+	opts.NoSend = true
 
 	// gas estimation
 	{
 		opts.GasLimit = math.MaxUint64
-		opts.NoSend = true
 		tx, err := c.BuildMessageTx(opts, iter.Current(), iter.skipUpdateClientCommitment)
 		if err != nil {
 			logger.Error("failed to build tx for gas estimation", err)
-			return nil, 1, err
+			return nil, err
 		}
 
 		txGasLimit, err := estimateGas(ctx, c, tx, true, logger)
 		if err != nil {
-			return nil, 1, err
+			return nil, err
 		}
 		opts.GasLimit = txGasLimit
 	}
@@ -576,15 +580,15 @@ func (iter *CallIter) buildSingleTx(ctx context.Context, c *Chain) (*gethtypes.T
 	tx, err := c.BuildMessageTx(opts, iter.Current(), iter.skipUpdateClientCommitment)
 	if err != nil {
 		logger.Error("failed to build tx", err)
-		return nil, 0, err
+		return nil, err
 	}
 
-	return tx, 1, nil
+	return &CallIterBuildResult{tx,1}, nil
 }
 
-func (iter *CallIter) buildMultiTx(ctx context.Context, c *Chain) (*gethtypes.Transaction, int, error) {
+func (iter *CallIter) buildMultiTx(ctx context.Context, c *Chain) (*CallIterBuildResult, error) {
 	if (iter.End()) {
-		return nil, 0, nil
+		return nil, nil
 	}
 	// now iter.cursor < len(iter.msgs)
 
@@ -592,27 +596,28 @@ func (iter *CallIter) buildMultiTx(ctx context.Context, c *Chain) (*gethtypes.Tr
 
 	opts, err := c.TxOpts(ctx, true);
 	if err != nil {
-		return nil, 1, err
+		return nil, err
 	}
+	opts.NoSend = true
+	opts.GasLimit = math.MaxUint64
 
 	if iter.txs == nil { // create txs at first multicall call
-		opts.GasLimit = math.MaxUint64
-		opts.NoSend = true
 		txs := make([]gethtypes.Transaction, 0, len(iter.msgs))
 
 		for i := 0; i < len(iter.msgs); i++ {
 			logger := &log.RelayLogger{Logger: logger.Logger}
-			iter.updateLoggerMessageInfo(logger, iter.Cursor(), i+1)
+			iter.updateLoggerMessageInfo(logger, i, 1)
 
+			// note that its nonce is not checked
 			tx, err := c.BuildMessageTx(opts, iter.msgs[i], iter.skipUpdateClientCommitment)
 			if err != nil {
 				logger.Error("failed to build tx for gas estimation", err)
-				return nil, i+1, err
+				return nil, err
 			}
 			if tx.To() == nil {
 				err2 := fmt.Errorf("no target address")
 				logger.Error("failed to construct Multicall3Call", err2)
-				return nil, i+1, err2
+				return nil, err2
 			}
 			txs = append(txs, *tx)
 		}
@@ -640,8 +645,6 @@ func (iter *CallIter) buildMultiTx(ctx context.Context, c *Chain) (*gethtypes.Tr
 				})
 			}
 
-			opts.GasLimit = math.MaxUint64
-			opts.NoSend = true
 			multiTx, err := c.multicall3.Aggregate(opts, calls)
 			if err != nil {
 				return err
@@ -661,7 +664,7 @@ func (iter *CallIter) buildMultiTx(ctx context.Context, c *Chain) (*gethtypes.Tr
 
 	if err != nil {
 		logger.Error("failed to prepare multicall tx", err)
-		return nil, count, err
+		return nil, err
 	}
 
 	opts.GasLimit = lastOkGasLimit
@@ -670,9 +673,9 @@ func (iter *CallIter) buildMultiTx(ctx context.Context, c *Chain) (*gethtypes.Tr
 	tx, err := c.multicall3.Aggregate(opts, lastOkCalls)
 	if err != nil {
 		logger.Error("failed to build multicall tx with real send parameters", err)
-		return nil, count, err
+		return nil, err
 	}
-	return tx, count, nil
+	return &CallIterBuildResult{tx,count}, nil
 }
 
 func findItems(
