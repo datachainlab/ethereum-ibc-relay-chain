@@ -48,25 +48,31 @@ func (c *Chain) SendMsgs(msgs []sdk.Msg) ([]core.MsgID, error) {
 		logger := &log.RelayLogger{Logger: logger.With(logAttrMsgIndexFrom, from)}
 		c.ethereumSigner.SetLogger(logger);
 
-		tx, err := iter.SendTx(ctx, c)
-		logger.Logger = logger.With(logAttrMsgIndexTo, iter.Cursor() -1)
+		built, err := iter.BuildTx(ctx, c)
 
 		if err != nil {
-			logger.Error("failed to send msg", err)
+			logger.Error("failed to build msg tx", err)
 			return nil, err
-		} else if tx == nil {
+		} else if built == nil {
 			break
 		} else {
-			logger.Logger = logger.With(logAttrTxHash, tx.Hash())
+			iter.updateLoggerMessageInfo(logger, from, built.count)
+			logger.Logger = logger.With(logAttrTxHash, built.tx.Hash())
 		}
 
-		if rawTxData, err := tx.MarshalBinary(); err != nil {
+		if rawTxData, err := built.tx.MarshalBinary(); err != nil {
 			logger.Error("failed to encode tx", err)
 		} else {
 			logger.Logger = logger.With(logAttrRawTxData, hex.EncodeToString(rawTxData))
 		}
 
-		receipt, err := c.client.WaitForReceiptAndGet(ctx, tx.Hash())
+		err = c.client.SendTransaction(ctx, built.tx)
+		if err != nil {
+			logger.Error("failed to send tx", err)
+			return nil, err
+		}
+
+		receipt, err := c.client.WaitForReceiptAndGet(ctx, built.tx.Hash())
 		if err != nil {
 			logger.Error("failed to get receipt", err)
 			return nil, err
@@ -102,9 +108,10 @@ func (c *Chain) SendMsgs(msgs []sdk.Msg) ([]core.MsgID, error) {
 				}
 			}
 		}
-		for i := from; i < iter.Cursor(); i++ {
-			msgIDs = append(msgIDs, NewMsgID(tx.Hash()))
+		for i := 0; i < built.count; i++ {
+			msgIDs = append(msgIDs, NewMsgID(built.tx.Hash()))
 		}
+		iter.Next(built.count);
 	}
 	return msgIDs, nil
 }
@@ -341,7 +348,7 @@ func (c *Chain) TxAcknowledgement(opts *bind.TransactOpts, msg *chantypes.MsgAck
 	})
 }
 
-func (c *Chain) SendTx(opts *bind.TransactOpts, msg sdk.Msg, skipUpdateClientCommitment bool) (*gethtypes.Transaction, error) {
+func (c *Chain) BuildMessageTx(opts *bind.TransactOpts, msg sdk.Msg, skipUpdateClientCommitment bool) (*gethtypes.Transaction, error) {
 	logger := c.GetChainLogger()
 	var (
 		tx  *gethtypes.Transaction
@@ -406,7 +413,7 @@ func (c *Chain) getRevertReasonFromReceipt(ctx context.Context, receipt *client.
 
 func (c *Chain) getRevertReasonFromRpcError(err error) (string, []byte, error) {
 	if de, ok := err.(rpc.DataError); !ok {
-		return "", nil, fmt.Errorf("failed with unexpected error type: errorType=%T", err)
+		return fmt.Sprintf("not an rpc error: errorType=%T: msg=%s", err, err.Error()), nil, nil
 	} else if de.ErrorData() == nil {
 		return "", nil, fmt.Errorf("failed without error data")
 	} else if errorData, ok := de.ErrorData().(string); !ok {
@@ -489,10 +496,17 @@ type CallIter struct {
 	msgTypeNames []string
 }
 func NewCallIter(msgs []sdk.Msg, skipUpdateClientCommitment bool) CallIter {
+	msgTypeNames := make([]string, 0, len(msgs))
+	for i := 0; i < len(msgs); i++ {
+		msgTypeName := fmt.Sprintf("%T", msgs[i])
+		msgTypeNames = append(msgTypeNames, msgTypeName)
+	}
+
 	return CallIter {
 		msgs: msgs,
 		cursor: 0,
 		skipUpdateClientCommitment: skipUpdateClientCommitment,
+		msgTypeNames: msgTypeNames,
 	}
 }
 func (iter *CallIter) Cursor() int {
@@ -504,41 +518,53 @@ func (iter *CallIter) Current() sdk.Msg {
 func (iter *CallIter) End() bool {
 	return len(iter.msgs) <= iter.cursor
 }
-func (iter *CallIter) Next() {
-	if !iter.End() {
-		iter.cursor += 1
-	}
+func (iter *CallIter) Next(n int) {
+	iter.cursor = min(len(iter.msgs), iter.cursor + n)
 }
 
-func (iter *CallIter) SendTx(ctx context.Context, c *Chain) (*gethtypes.Transaction, error) {
+func (iter *CallIter) updateLoggerMessageInfo(logger *log.RelayLogger, from int, count int) {
+	if from < 0 || count < 0 || len(iter.msgs) <= from || len(iter.msgs) < from + count {
+		logger.Error("invalid parameter", fmt.Errorf("out of index: len(msgs)=%d, from=%d, count=%d", len(iter.msgs), from, count))
+		return
+	}
+
+	logger.Logger = logger.With(
+		logAttrMsgIndexFrom, from,
+		logAttrMsgCount, count,
+		logAttrMsgType, strings.Join(iter.msgTypeNames[from : from + count], ","),
+	)
+}
+
+type CallIterBuildResult struct {
+	tx *gethtypes.Transaction
+	count int
+}
+func (iter *CallIter) BuildTx(ctx context.Context, c *Chain) (*CallIterBuildResult, error) {
 	if c.multicall3 == nil {
-		return iter.sendSingleTx(ctx, c)
+		return iter.buildSingleTx(ctx, c)
 	} else {
-		return iter.sendMultiTx(ctx, c)
+		return iter.buildMultiTx(ctx, c)
 	}
 }
 
-func (iter *CallIter) sendSingleTx(ctx context.Context, c *Chain) (*gethtypes.Transaction, error) {
+func (iter *CallIter) buildSingleTx(ctx context.Context, c *Chain) (*CallIterBuildResult, error) {
 	if iter.End() {
 		return nil, nil
 	}
 
 	logger := c.GetChainLogger()
-	logger = &log.RelayLogger{Logger: logger.With(
-		logAttrMsgIndexFrom, iter.Cursor(),
-		logAttrMsgType, fmt.Sprintf("%T", iter.Current()),
-	)}
+	iter.updateLoggerMessageInfo(logger, iter.Cursor(), 1)
 
 	opts, err := c.TxOpts(ctx, true);
 	if err != nil {
 		return nil, err
 	}
+	opts.NoSend = true
 
 	// gas estimation
 	{
 		opts.GasLimit = math.MaxUint64
-		opts.NoSend = true
-		tx, err := c.SendTx(opts, iter.Current(), iter.skipUpdateClientCommitment)
+		tx, err := c.BuildMessageTx(opts, iter.Current(), iter.skipUpdateClientCommitment)
 		if err != nil {
 			logger.Error("failed to build tx for gas estimation", err)
 			return nil, err
@@ -551,17 +577,16 @@ func (iter *CallIter) sendSingleTx(ctx context.Context, c *Chain) (*gethtypes.Tr
 		opts.GasLimit = txGasLimit
 	}
 
-	opts.NoSend = false
-	tx, err := c.SendTx(opts, iter.Current(), iter.skipUpdateClientCommitment)
+	tx, err := c.BuildMessageTx(opts, iter.Current(), iter.skipUpdateClientCommitment)
 	if err != nil {
-		logger.Error("failed to send msg", err)
+		logger.Error("failed to build tx", err)
 		return nil, err
 	}
-	iter.Next()
-	return tx, nil
+
+	return &CallIterBuildResult{tx,1}, nil
 }
 
-func (iter *CallIter) sendMultiTx(ctx context.Context, c *Chain) (*gethtypes.Transaction, error) {
+func (iter *CallIter) buildMultiTx(ctx context.Context, c *Chain) (*CallIterBuildResult, error) {
 	if (iter.End()) {
 		return nil, nil
 	}
@@ -571,28 +596,21 @@ func (iter *CallIter) sendMultiTx(ctx context.Context, c *Chain) (*gethtypes.Tra
 
 	opts, err := c.TxOpts(ctx, true);
 	if err != nil {
-		if err != nil {
-			return nil, err
-		}
+		return nil, err
 	}
+	opts.NoSend = true
+	opts.GasLimit = math.MaxUint64
 
 	if iter.txs == nil { // create txs at first multicall call
-		opts.GasLimit = math.MaxUint64
-		opts.NoSend = true
 		txs := make([]gethtypes.Transaction, 0, len(iter.msgs))
-		msgTypeNames := make([]string, 0, len(iter.msgs))
 
 		for i := 0; i < len(iter.msgs); i++ {
-			msgTypeName := fmt.Sprintf("%T", iter.msgs[i])
-			msgTypeNames = append(msgTypeNames, msgTypeName)
+			logger := &log.RelayLogger{Logger: logger.Logger}
+			iter.updateLoggerMessageInfo(logger, i, 1)
 
-			tx, err := c.SendTx(opts, iter.msgs[i], iter.skipUpdateClientCommitment)
+			// note that its nonce is not checked
+			tx, err := c.BuildMessageTx(opts, iter.msgs[i], iter.skipUpdateClientCommitment)
 			if err != nil {
-				logger := &log.RelayLogger{Logger: logger.With(
-					logAttrMsgIndexFrom, i,
-					logAttrMsgIndexTo, i,
-					logAttrMsgType, msgTypeName,
-				)}
 				logger.Error("failed to build tx for gas estimation", err)
 				return nil, err
 			}
@@ -604,7 +622,6 @@ func (iter *CallIter) sendMultiTx(ctx context.Context, c *Chain) (*gethtypes.Tra
 			txs = append(txs, *tx)
 		}
 		iter.txs = txs
-		iter.msgTypeNames = msgTypeNames
 	}
 
 	var (
@@ -617,11 +634,8 @@ func (iter *CallIter) sendMultiTx(ctx context.Context, c *Chain) (*gethtypes.Tra
 			from := iter.Cursor()
 			to := from + count
 
-			logger := &log.RelayLogger{Logger: logger.With(
-				logAttrMsgIndexFrom, from,
-				logAttrMsgIndexTo, from + count - 1,
-				logAttrMsgType, strings.Join(iter.msgTypeNames[0 : from + count], ","),
-			)}
+			logger := &log.RelayLogger{Logger: logger.Logger}
+			iter.updateLoggerMessageInfo(logger, from, count)
 
 			calls := make([]multicall3.Multicall3Call, 0, count)
 			for i := from; i < to; i++ {
@@ -631,8 +645,6 @@ func (iter *CallIter) sendMultiTx(ctx context.Context, c *Chain) (*gethtypes.Tra
 				})
 			}
 
-			opts.GasLimit = math.MaxUint64
-			opts.NoSend = true
 			multiTx, err := c.multicall3.Aggregate(opts, calls)
 			if err != nil {
 				return err
@@ -648,11 +660,7 @@ func (iter *CallIter) sendMultiTx(ctx context.Context, c *Chain) (*gethtypes.Tra
 			return nil
 		})
 
-	logger = &log.RelayLogger{Logger: logger.With(
-		logAttrMsgIndexFrom, iter.Cursor(),
-		logAttrMsgIndexTo, iter.Cursor() + count - 1,
-		logAttrMsgType, strings.Join(iter.msgTypeNames[0 : iter.Cursor() + count], ","),
-	)}
+	iter.updateLoggerMessageInfo(logger, iter.Cursor(), count)
 
 	if err != nil {
 		logger.Error("failed to prepare multicall tx", err)
@@ -660,15 +668,14 @@ func (iter *CallIter) sendMultiTx(ctx context.Context, c *Chain) (*gethtypes.Tra
 	}
 
 	opts.GasLimit = lastOkGasLimit
-	opts.NoSend = false
+
+	// add raw tx to log attribute
 	tx, err := c.multicall3.Aggregate(opts, lastOkCalls)
 	if err != nil {
-		logger.Error("failed to send multicall tx", err)
+		logger.Error("failed to build multicall tx with real send parameters", err)
 		return nil, err
 	}
-	logger.Info("succeeded in sending multicall")
-	iter.cursor += count
-	return tx, nil
+	return &CallIterBuildResult{tx,count}, nil
 }
 
 func findItems(
