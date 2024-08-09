@@ -5,7 +5,7 @@ import (
 
 	clienttypes "github.com/cosmos/ibc-go/v8/modules/core/02-client/types"
 	chantypes "github.com/cosmos/ibc-go/v8/modules/core/04-channel/types"
-	"github.com/datachainlab/ethereum-ibc-relay-chain/pkg/contract/ibcchannelupgradablemodule"
+	"github.com/datachainlab/ethereum-ibc-relay-chain/pkg/contract/iibcchannelupgradablemodule"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/hyperledger-labs/yui-relayer/config"
 	"github.com/spf13/cobra"
@@ -114,13 +114,13 @@ func proposeUpgradeCmd(ctx *config.Context) *cobra.Command {
 				appAddr,
 				ethChain.pathEnd.PortID,
 				ethChain.pathEnd.ChannelID,
-				ibcchannelupgradablemodule.UpgradeFieldsData{
+				iibcchannelupgradablemodule.UpgradeFieldsData{
 					Ordering:       ordering,
 					ConnectionHops: connHops,
 					Version:        version,
 				},
-				ibcchannelupgradablemodule.TimeoutData{
-					Height:    ibcchannelupgradablemodule.HeightData(timeoutHeight),
+				iibcchannelupgradablemodule.TimeoutData{
+					Height:    iibcchannelupgradablemodule.HeightData(timeoutHeight),
 					Timestamp: timeoutTimestamp,
 				},
 			)

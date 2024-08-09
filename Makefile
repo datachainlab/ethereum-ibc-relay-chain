@@ -24,15 +24,12 @@ compile:
 .PHONY: abigen
 abigen: compile
 	@mkdir -p ./build/abi
-	@mkdir -p ./pkg/contract/ibchandler
-	@mkdir -p ./pkg/contract/multicall3
-	@mkdir -p ./pkg/contract/ibcchannelupgradablemodule
-	@jq -r '.abi' ./yui-ibc-solidity/out/IBCHandler.sol/IBCHandler.json > ./build/abi/IBCHandler.abi
-	@jq -r '.abi' ./yui-ibc-solidity/out/Multicall3.sol/Multicall3.json > ./build/abi/Multicall3.abi
-	@jq -r '.abi' ./yui-ibc-solidity/out/IBCChannelUpgradableModule.sol/IIBCChannelUpgradableModule.json > ./build/abi/IIBCChannelUpgradableModule.abi
-	@$(ABIGEN) --abi ./build/abi/IBCHandler.abi --pkg ibchandler --out ./pkg/contract/ibchandler/ibchandler.go
-	@$(ABIGEN) --abi ./build/abi/Multicall3.abi --pkg multicall3 --out ./pkg/contract/multicall3/multicall3.go
-	@$(ABIGEN) --abi ./build/abi/IIBCChannelUpgradableModule.abi --pkg ibcchannelupgradablemodule -out ./pkg/contract/ibcchannelupgradablemodule/ibcchannelupgradablemodule.go
+	@for a in IBCHandler Multicall3 IIBCChannelUpgradableModule; do \
+	  b=$$(echo $$a | tr '[A-Z]' '[a-z]'); \
+	  mkdir -p ./build/abi ./pkg/contract/$$b; \
+	  jq -r '.abi' ./yui-ibc-solidity/out/$$a.sol/$$a.json > ./build/abi/$$a.abi; \
+	  $(ABIGEN) --abi ./build/abi/$$a.abi --pkg $$b --out ./pkg/contract/$$b/$$b.go; \
+	done
 
 .PHONY: proto-gen proto-update-deps
 proto-gen:
