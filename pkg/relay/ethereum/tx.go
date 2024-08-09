@@ -5,9 +5,10 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	math "math"
+	"slices"
 	"sort"
 	"strings"
-	math "math"
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/gogoproto/proto"
@@ -45,8 +46,8 @@ func (c *Chain) SendMsgs(msgs []sdk.Msg) ([]core.MsgID, error) {
 	iter := NewCallIter(msgs, skipUpdateClientCommitment)
 	for !iter.End() {
 		from := iter.Cursor()
-		logger := &log.RelayLogger{Logger: logger.With(logAttrMsgIndexFrom, from)}
-		c.ethereumSigner.SetLogger(logger);
+		logger := logger.With(logAttrMsgIndexFrom, from)
+		c.ethereumSigner.SetLogger(logger)
 
 		built, err := iter.BuildTx(ctx, c)
 
@@ -56,14 +57,14 @@ func (c *Chain) SendMsgs(msgs []sdk.Msg) ([]core.MsgID, error) {
 		} else if built == nil {
 			break
 		} else {
-			iter.updateLoggerMessageInfo(logger, from, built.count)
-			logger.Logger = logger.With(logAttrTxHash, built.tx.Hash())
+			logger = iter.updateLoggerMessageInfo(logger, from, built.count)
+			logger = logger.With(logAttrTxHash, built.tx.Hash())
 		}
 
 		if rawTxData, err := built.tx.MarshalBinary(); err != nil {
 			logger.Error("failed to encode tx", err)
 		} else {
-			logger.Logger = logger.With(logAttrRawTxData, hex.EncodeToString(rawTxData))
+			logger = logger.With(logAttrRawTxData, hex.EncodeToString(rawTxData))
 		}
 
 		err = c.client.SendTransaction(ctx, built.tx)
@@ -77,7 +78,7 @@ func (c *Chain) SendMsgs(msgs []sdk.Msg) ([]core.MsgID, error) {
 			logger.Error("failed to get receipt", err)
 			return nil, err
 		} else {
-			logger.Logger = logger.With(
+			logger = logger.With(
 				logAttrBlockHash, receipt.BlockHash,
 				logAttrBlockNumber, receipt.BlockNumber.Uint64(),
 				logAttrTxIndex, receipt.TransactionIndex,
@@ -87,10 +88,10 @@ func (c *Chain) SendMsgs(msgs []sdk.Msg) ([]core.MsgID, error) {
 		if receipt.Status == gethtypes.ReceiptStatusFailed {
 			if revertReason, rawErrorData, err := c.getRevertReasonFromReceipt(ctx, receipt); err != nil {
 				// Raw error data may be available even if revert reason isn't available.
-				logger.Logger = logger.With(logAttrRawErrorData, hex.EncodeToString(rawErrorData))
+				logger = logger.With(logAttrRawErrorData, hex.EncodeToString(rawErrorData))
 				logger.Error("failed to get revert reason", err)
 			} else {
-				logger.Logger = logger.With(
+				logger = logger.With(
 					logAttrRawErrorData, hex.EncodeToString(rawErrorData),
 					logAttrRevertReason, revertReason,
 				)
@@ -111,7 +112,7 @@ func (c *Chain) SendMsgs(msgs []sdk.Msg) ([]core.MsgID, error) {
 		for i := 0; i < built.count; i++ {
 			msgIDs = append(msgIDs, NewMsgID(built.tx.Hash()))
 		}
-		iter.Next(built.count);
+		iter.Next(built.count)
 	}
 	return msgIDs, nil
 }
@@ -348,6 +349,87 @@ func (c *Chain) TxAcknowledgement(opts *bind.TransactOpts, msg *chantypes.MsgAck
 	})
 }
 
+func (c *Chain) TxChannelUpgradeInit(opts *bind.TransactOpts, msg *chantypes.MsgChannelUpgradeInit) (*gethtypes.Transaction, error) {
+	return c.ibcHandler.ChannelUpgradeInit(opts, ibchandler.IIBCChannelUpgradeBaseMsgChannelUpgradeInit{
+		PortId:                c.pathEnd.PortID,
+		ChannelId:             c.pathEnd.ChannelID,
+		ProposedUpgradeFields: pbToUpgradeFields(msg.Fields),
+	})
+}
+
+func (c *Chain) TxChannelUpgradeTry(opts *bind.TransactOpts, msg *chantypes.MsgChannelUpgradeTry) (*gethtypes.Transaction, error) {
+	return c.ibcHandler.ChannelUpgradeTry(opts, ibchandler.IIBCChannelUpgradeBaseMsgChannelUpgradeTry{
+		PortId:                      c.pathEnd.PortID,
+		ChannelId:                   c.pathEnd.ChannelID,
+		CounterpartyUpgradeSequence: msg.CounterpartyUpgradeSequence,
+		CounterpartyUpgradeFields:   pbToUpgradeFields(msg.CounterpartyUpgradeFields),
+		ProposedConnectionHops:      slices.Clone(msg.ProposedUpgradeConnectionHops),
+		Proofs: ibchandler.IIBCChannelUpgradeBaseChannelUpgradeProofs{
+			ProofChannel: msg.ProofChannel,
+			ProofUpgrade: msg.ProofUpgrade,
+			ProofHeight:  pbToHandlerHeight(msg.ProofHeight),
+		},
+	})
+}
+
+func (c *Chain) TxChannelUpgradeAck(opts *bind.TransactOpts, msg *chantypes.MsgChannelUpgradeAck) (*gethtypes.Transaction, error) {
+	return c.ibcHandler.ChannelUpgradeAck(opts, ibchandler.IIBCChannelUpgradeBaseMsgChannelUpgradeAck{
+		PortId:              c.pathEnd.PortID,
+		ChannelId:           c.pathEnd.ChannelID,
+		CounterpartyUpgrade: pbToUpgrade(msg.CounterpartyUpgrade),
+		Proofs: ibchandler.IIBCChannelUpgradeBaseChannelUpgradeProofs{
+			ProofChannel: msg.ProofChannel,
+			ProofUpgrade: msg.ProofUpgrade,
+			ProofHeight:  pbToHandlerHeight(msg.ProofHeight),
+		},
+	})
+}
+
+func (c *Chain) TxChannelUpgradeConfirm(opts *bind.TransactOpts, msg *chantypes.MsgChannelUpgradeConfirm) (*gethtypes.Transaction, error) {
+	return c.ibcHandler.ChannelUpgradeConfirm(opts, ibchandler.IIBCChannelUpgradeBaseMsgChannelUpgradeConfirm{
+		PortId:                   c.pathEnd.PortID,
+		ChannelId:                c.pathEnd.ChannelID,
+		CounterpartyChannelState: uint8(msg.CounterpartyChannelState),
+		CounterpartyUpgrade:      pbToUpgrade(msg.CounterpartyUpgrade),
+		Proofs: ibchandler.IIBCChannelUpgradeBaseChannelUpgradeProofs{
+			ProofChannel: msg.ProofChannel,
+			ProofUpgrade: msg.ProofUpgrade,
+			ProofHeight:  pbToHandlerHeight(msg.ProofHeight),
+		},
+	})
+}
+
+func (c *Chain) TxChannelUpgradeOpen(opts *bind.TransactOpts, msg *chantypes.MsgChannelUpgradeOpen) (*gethtypes.Transaction, error) {
+	return c.ibcHandler.ChannelUpgradeOpen(opts, ibchandler.IIBCChannelUpgradeBaseMsgChannelUpgradeOpen{
+		PortId:                      c.pathEnd.PortID,
+		ChannelId:                   c.pathEnd.ChannelID,
+		CounterpartyChannelState:    uint8(msg.CounterpartyChannelState),
+		CounterpartyUpgradeSequence: msg.CounterpartyUpgradeSequence,
+		ProofChannel:                msg.ProofChannel,
+		ProofHeight:                 pbToHandlerHeight(msg.ProofHeight),
+	})
+}
+
+func (c *Chain) TxChannelUpgradeCancel(opts *bind.TransactOpts, msg *chantypes.MsgChannelUpgradeCancel) (*gethtypes.Transaction, error) {
+	return c.ibcHandler.CancelChannelUpgrade(opts, ibchandler.IIBCChannelUpgradeBaseMsgCancelChannelUpgrade{
+		PortId:            c.pathEnd.PortID,
+		ChannelId:         c.pathEnd.ChannelID,
+		ErrorReceipt:      ibchandler.ErrorReceiptData(msg.ErrorReceipt),
+		ProofUpgradeError: msg.ProofErrorReceipt,
+		ProofHeight:       pbToHandlerHeight(msg.ProofHeight),
+	})
+}
+
+func (c *Chain) TxChannelUpgradeTimeout(opts *bind.TransactOpts, msg *chantypes.MsgChannelUpgradeTimeout) (*gethtypes.Transaction, error) {
+	return c.ibcHandler.TimeoutChannelUpgrade(opts, ibchandler.IIBCChannelUpgradeBaseMsgTimeoutChannelUpgrade{
+		PortId:              c.pathEnd.PortID,
+		ChannelId:           c.pathEnd.ChannelID,
+		CounterpartyChannel: pbToChannel(msg.CounterpartyChannel),
+		ProofChannel:        msg.ProofChannel,
+		ProofHeight:         pbToHandlerHeight(msg.ProofHeight),
+	})
+}
+
 func (c *Chain) BuildMessageTx(opts *bind.TransactOpts, msg sdk.Msg, skipUpdateClientCommitment bool) (*gethtypes.Transaction, error) {
 	logger := c.GetChainLogger()
 	var (
@@ -379,6 +461,20 @@ func (c *Chain) BuildMessageTx(opts *bind.TransactOpts, msg sdk.Msg, skipUpdateC
 		tx, err = c.TxRecvPacket(opts, msg)
 	case *chantypes.MsgAcknowledgement:
 		tx, err = c.TxAcknowledgement(opts, msg)
+	case *chantypes.MsgChannelUpgradeInit:
+		tx, err = c.TxChannelUpgradeInit(opts, msg)
+	case *chantypes.MsgChannelUpgradeTry:
+		tx, err = c.TxChannelUpgradeTry(opts, msg)
+	case *chantypes.MsgChannelUpgradeAck:
+		tx, err = c.TxChannelUpgradeAck(opts, msg)
+	case *chantypes.MsgChannelUpgradeConfirm:
+		tx, err = c.TxChannelUpgradeConfirm(opts, msg)
+	case *chantypes.MsgChannelUpgradeOpen:
+		tx, err = c.TxChannelUpgradeOpen(opts, msg)
+	case *chantypes.MsgChannelUpgradeCancel:
+		tx, err = c.TxChannelUpgradeCancel(opts, msg)
+	case *chantypes.MsgChannelUpgradeTimeout:
+		tx, err = c.TxChannelUpgradeTimeout(opts, msg)
 	// case *transfertypes.MsgTransfer:
 	// 	err = c.client.transfer(msg)
 	default:
@@ -437,30 +533,27 @@ func (c *Chain) parseRpcError(err error) (string, string) {
 	return revertReason, hex.EncodeToString(rawErrorData)
 }
 
-
 func estimateGas(
 	ctx context.Context,
 	c *Chain,
 	tx *gethtypes.Transaction,
 	doRound bool, // return rounded gas limit when gas limit is over
-	base_logger *log.RelayLogger,
+	logger *log.RelayLogger,
 ) (uint64, error) {
-	logger := &log.RelayLogger{ Logger: base_logger.Logger }
-
 	if rawTxData, err := tx.MarshalBinary(); err != nil {
 		logger.Error("failed to encode tx", err)
 	} else {
-		logger.Logger = logger.With(logAttrRawTxData, hex.EncodeToString(rawTxData))
+		logger = logger.With(logAttrRawTxData, hex.EncodeToString(rawTxData))
 	}
 
 	estimatedGas, err := c.client.EstimateGasFromTx(ctx, tx)
 	if err != nil {
 		if revertReason, rawErrorData, err := c.getRevertReasonFromRpcError(err); err != nil {
 			// Raw error data may be available even if revert reason isn't available.
-			logger.Logger = logger.With(logAttrRawErrorData, hex.EncodeToString(rawErrorData))
+			logger = logger.With(logAttrRawErrorData, hex.EncodeToString(rawErrorData))
 			logger.Error("failed to get revert reason", err)
 		} else {
-			logger.Logger = logger.With(
+			logger = logger.With(
 				logAttrRawErrorData, hex.EncodeToString(rawErrorData),
 				logAttrRevertReason, revertReason,
 			)
@@ -486,15 +579,15 @@ func estimateGas(
 	return txGasLimit, nil
 }
 
-
 type CallIter struct {
-	msgs []sdk.Msg
-	cursor int
+	msgs                       []sdk.Msg
+	cursor                     int
 	skipUpdateClientCommitment bool
 	// for multicall
-	txs []gethtypes.Transaction
+	txs          []gethtypes.Transaction
 	msgTypeNames []string
 }
+
 func NewCallIter(msgs []sdk.Msg, skipUpdateClientCommitment bool) CallIter {
 	msgTypeNames := make([]string, 0, len(msgs))
 	for i := 0; i < len(msgs); i++ {
@@ -502,11 +595,11 @@ func NewCallIter(msgs []sdk.Msg, skipUpdateClientCommitment bool) CallIter {
 		msgTypeNames = append(msgTypeNames, msgTypeName)
 	}
 
-	return CallIter {
-		msgs: msgs,
-		cursor: 0,
+	return CallIter{
+		msgs:                       msgs,
+		cursor:                     0,
 		skipUpdateClientCommitment: skipUpdateClientCommitment,
-		msgTypeNames: msgTypeNames,
+		msgTypeNames:               msgTypeNames,
 	}
 }
 func (iter *CallIter) Cursor() int {
@@ -519,26 +612,26 @@ func (iter *CallIter) End() bool {
 	return len(iter.msgs) <= iter.cursor
 }
 func (iter *CallIter) Next(n int) {
-	iter.cursor = min(len(iter.msgs), iter.cursor + n)
+	iter.cursor = min(len(iter.msgs), iter.cursor+n)
 }
 
-func (iter *CallIter) updateLoggerMessageInfo(logger *log.RelayLogger, from int, count int) {
-	if from < 0 || count < 0 || len(iter.msgs) <= from || len(iter.msgs) < from + count {
-		logger.Error("invalid parameter", fmt.Errorf("out of index: len(msgs)=%d, from=%d, count=%d", len(iter.msgs), from, count))
-		return
+func (iter *CallIter) updateLoggerMessageInfo(logger *log.RelayLogger, from int, count int) *log.RelayLogger {
+	if from < 0 || count < 0 || len(iter.msgs) <= from || len(iter.msgs) < from+count {
+		panic(fmt.Errorf("out of index: len(msgs)=%d, from=%d, count=%d", len(iter.msgs), from, count))
 	}
 
-	logger.Logger = logger.With(
+	return logger.With(
 		logAttrMsgIndexFrom, from,
 		logAttrMsgCount, count,
-		logAttrMsgType, strings.Join(iter.msgTypeNames[from : from + count], ","),
+		logAttrMsgType, strings.Join(iter.msgTypeNames[from:from+count], ","),
 	)
 }
 
 type CallIterBuildResult struct {
-	tx *gethtypes.Transaction
+	tx    *gethtypes.Transaction
 	count int
 }
+
 func (iter *CallIter) BuildTx(ctx context.Context, c *Chain) (*CallIterBuildResult, error) {
 	if c.multicall3 == nil {
 		return iter.buildSingleTx(ctx, c)
@@ -553,9 +646,9 @@ func (iter *CallIter) buildSingleTx(ctx context.Context, c *Chain) (*CallIterBui
 	}
 
 	logger := c.GetChainLogger()
-	iter.updateLoggerMessageInfo(logger, iter.Cursor(), 1)
+	logger = iter.updateLoggerMessageInfo(logger, iter.Cursor(), 1)
 
-	opts, err := c.TxOpts(ctx, true);
+	opts, err := c.TxOpts(ctx, true)
 	if err != nil {
 		return nil, err
 	}
@@ -583,18 +676,18 @@ func (iter *CallIter) buildSingleTx(ctx context.Context, c *Chain) (*CallIterBui
 		return nil, err
 	}
 
-	return &CallIterBuildResult{tx,1}, nil
+	return &CallIterBuildResult{tx, 1}, nil
 }
 
 func (iter *CallIter) buildMultiTx(ctx context.Context, c *Chain) (*CallIterBuildResult, error) {
-	if (iter.End()) {
+	if iter.End() {
 		return nil, nil
 	}
 	// now iter.cursor < len(iter.msgs)
 
 	logger := c.GetChainLogger()
 
-	opts, err := c.TxOpts(ctx, true);
+	opts, err := c.TxOpts(ctx, true)
 	if err != nil {
 		return nil, err
 	}
@@ -605,8 +698,7 @@ func (iter *CallIter) buildMultiTx(ctx context.Context, c *Chain) (*CallIterBuil
 		txs := make([]gethtypes.Transaction, 0, len(iter.msgs))
 
 		for i := 0; i < len(iter.msgs); i++ {
-			logger := &log.RelayLogger{Logger: logger.Logger}
-			iter.updateLoggerMessageInfo(logger, i, 1)
+			logger := iter.updateLoggerMessageInfo(logger, i, 1)
 
 			// note that its nonce is not checked
 			tx, err := c.BuildMessageTx(opts, iter.msgs[i], iter.skipUpdateClientCommitment)
@@ -625,22 +717,21 @@ func (iter *CallIter) buildMultiTx(ctx context.Context, c *Chain) (*CallIterBuil
 	}
 
 	var (
-		lastOkCalls []multicall3.Multicall3Call = nil
-		lastOkGasLimit uint64 = 0
+		lastOkCalls    []multicall3.Multicall3Call = nil
+		lastOkGasLimit uint64                      = 0
 	)
 	count, err := findItems(
-		len(iter.msgs) - iter.Cursor(),
-		func(count int) (error) {
+		len(iter.msgs)-iter.Cursor(),
+		func(count int) error {
 			from := iter.Cursor()
 			to := from + count
 
-			logger := &log.RelayLogger{Logger: logger.Logger}
-			iter.updateLoggerMessageInfo(logger, from, count)
+			logger := iter.updateLoggerMessageInfo(logger, from, count)
 
 			calls := make([]multicall3.Multicall3Call, 0, count)
 			for i := from; i < to; i++ {
 				calls = append(calls, multicall3.Multicall3Call{
-					Target: *iter.txs[i].To(),
+					Target:   *iter.txs[i].To(),
 					CallData: iter.txs[i].Data(),
 				})
 			}
@@ -660,7 +751,7 @@ func (iter *CallIter) buildMultiTx(ctx context.Context, c *Chain) (*CallIterBuil
 			return nil
 		})
 
-	iter.updateLoggerMessageInfo(logger, iter.Cursor(), count)
+	logger = iter.updateLoggerMessageInfo(logger, iter.Cursor(), count)
 
 	if err != nil {
 		logger.Error("failed to prepare multicall tx", err)
@@ -675,14 +766,14 @@ func (iter *CallIter) buildMultiTx(ctx context.Context, c *Chain) (*CallIterBuil
 		logger.Error("failed to build multicall tx with real send parameters", err)
 		return nil, err
 	}
-	return &CallIterBuildResult{tx,count}, nil
+	return &CallIterBuildResult{tx, count}, nil
 }
 
 func findItems(
 	size int,
-	f func(int) (error),
+	f func(int) error,
 ) (int, error) {
-	if (size <= 0) {
+	if size <= 0 {
 		return 0, fmt.Errorf("empty items")
 	}
 
@@ -697,4 +788,3 @@ func findItems(
 		return i, nil
 	}
 }
-

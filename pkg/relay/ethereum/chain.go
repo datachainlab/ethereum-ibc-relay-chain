@@ -21,8 +21,8 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/hyperledger-labs/yui-relayer/core"
-	"github.com/hyperledger-labs/yui-relayer/signer"
 	"github.com/hyperledger-labs/yui-relayer/log"
+	"github.com/hyperledger-labs/yui-relayer/signer"
 
 	"github.com/datachainlab/ethereum-ibc-relay-chain/pkg/client"
 	"github.com/datachainlab/ethereum-ibc-relay-chain/pkg/contract/ibchandler"
@@ -274,10 +274,10 @@ var emptyConnRes = conntypes.NewQueryConnectionResponse(
 )
 
 // QueryConnection returns the remote end of a given connection
-func (c *Chain) QueryConnection(ctx core.QueryContext) (*conntypes.QueryConnectionResponse, error) {
+func (c *Chain) QueryConnection(ctx core.QueryContext, connectionID string) (*conntypes.QueryConnectionResponse, error) {
 	logger := c.GetChainLogger()
 	defer logger.TimeTrack(time.Now(), "QueryConnection")
-	conn, found, err := c.ibcHandler.GetConnection(c.callOptsFromQueryContext(ctx), c.pathEnd.ConnectionID)
+	conn, found, err := c.ibcHandler.GetConnection(c.callOptsFromQueryContext(ctx), connectionID)
 	if err != nil {
 		revertReason, data := c.parseRpcError(err)
 		logger.Error("failed to get connection", err, logAttrRevertReason, revertReason, logAttrRawErrorData, data)
@@ -474,6 +474,42 @@ func (c *Chain) QueryUnfinalizedRelayAcknowledgements(ctx core.QueryContext, cou
 	return packets, nil
 }
 
+// QueryChannelUpgrade returns the channel upgrade associated with a channelID
+func (c *Chain) QueryChannelUpgrade(ctx core.QueryContext) (*chantypes.QueryUpgradeResponse, error) {
+	if upg, found, err := c.ibcHandler.GetChannelUpgrade(c.callOptsFromQueryContext(ctx), c.pathEnd.PortID, c.pathEnd.ChannelID); err != nil {
+		return nil, err
+	} else if !found {
+		return nil, nil
+	} else {
+		return chantypes.NewQueryUpgradeResponse(upgradeToPB(upg), nil, ctx.Height().(clienttypes.Height)), nil
+	}
+}
+
+// QueryChannelUpgradeError iterates through chain events in reverse chronological order from the height of `ctx` and returns the error receipt that matches `upgradeSequence`.
+// If zero is specified as `upgradeSequence`, this function simply returns the error receipt stored at the height of `ctx`.
+func (c *Chain) QueryChannelUpgradeError(ctx core.QueryContext, upgradeSequence uint64) (*chantypes.QueryUpgradeErrorResponse, error) {
+	if ev, err := c.findWriteErrorReceipt(ctx, upgradeSequence); err != nil {
+		return nil, err
+	} else if ev == nil {
+		return nil, nil
+	} else {
+		return &chantypes.QueryUpgradeErrorResponse{
+			ErrorReceipt: chantypes.ErrorReceipt{
+				Sequence: ev.UpgradeSequence,
+				Message:  ev.Message,
+			},
+			ProofHeight: clienttypes.NewHeight(0, ev.Raw.BlockNumber),
+		}, nil
+	}
+}
+
+// QueryCanTransitionToFlushComplete returns the channel can transition to FLUSHCOMPLETE state.
+// Basically it requires that there remains no inflight packets.
+// Maybe additional condition for transition is required by the IBC/APP module.
+func (c *Chain) QueryCanTransitionToFlushComplete(ctx core.QueryContext) (bool, error) {
+	return c.ibcHandler.GetCanTransitionToFlushComplete(c.callOptsFromQueryContext(ctx), c.pathEnd.PortID, c.pathEnd.ChannelID)
+}
+
 // QueryBalance returns the amount of coins in the relayer account
 func (c *Chain) QueryBalance(ctx core.QueryContext, address sdk.AccAddress) (sdk.Coins, error) {
 	panic("not supported")
@@ -511,6 +547,7 @@ func (c *Chain) confirmConnectionOpened(ctx context.Context) (bool, error) {
 	// NOTE: err is nil if the connection not found
 	connRes, err := c.QueryConnection(
 		core.NewQueryContext(ctx, latestHeight),
+		c.pathEnd.ConnectionID,
 	)
 	if err != nil {
 		return false, err

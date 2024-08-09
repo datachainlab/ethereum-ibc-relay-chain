@@ -23,7 +23,8 @@ compile:
 
 .PHONY: abigen
 abigen: compile
-	@for a in IBCHandler Multicall3; do \
+	@mkdir -p ./build/abi
+	@for a in IBCHandler Multicall3 IIBCChannelUpgradableModule; do \
 	  b=$$(echo $$a | tr '[A-Z]' '[a-z]'); \
 	  mkdir -p ./build/abi ./pkg/contract/$$b; \
 	  jq -r '.abi' ./yui-ibc-solidity/out/$$a.sol/$$a.json > ./build/abi/$$a.abi; \
