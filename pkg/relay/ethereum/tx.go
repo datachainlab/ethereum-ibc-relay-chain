@@ -5,9 +5,9 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	math "math"
 	"sort"
 	"strings"
-	math "math"
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/gogoproto/proto"
@@ -31,11 +31,13 @@ import (
 // SendMsgs sends msgs to the chain
 func (c *Chain) SendMsgs(msgs []sdk.Msg) ([]core.MsgID, error) {
 	ctx := context.TODO()
+
 	// if src's connection is OPEN, dst's connection is OPEN or TRYOPEN, so we can skip to update client commitments
 	skipUpdateClientCommitment, err := c.confirmConnectionOpened(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to confirm connection opened: %w", err)
 	}
+
 	logger := c.GetChainLogger()
 	ethereumSignerLogger := c.ethereumSigner.GetLogger()
 	defer c.ethereumSigner.SetLogger(ethereumSignerLogger)
@@ -46,7 +48,7 @@ func (c *Chain) SendMsgs(msgs []sdk.Msg) ([]core.MsgID, error) {
 	for !iter.End() {
 		from := iter.Cursor()
 		logger := &log.RelayLogger{Logger: logger.With(logAttrMsgIndexFrom, from)}
-		c.ethereumSigner.SetLogger(logger);
+		c.ethereumSigner.SetLogger(logger)
 
 		built, err := iter.BuildTx(ctx, c)
 
@@ -111,7 +113,7 @@ func (c *Chain) SendMsgs(msgs []sdk.Msg) ([]core.MsgID, error) {
 		for i := 0; i < built.count; i++ {
 			msgIDs = append(msgIDs, NewMsgID(built.tx.Hash()))
 		}
-		iter.Next(built.count);
+		iter.Next(built.count)
 	}
 	return msgIDs, nil
 }
@@ -437,7 +439,6 @@ func (c *Chain) parseRpcError(err error) (string, string) {
 	return revertReason, hex.EncodeToString(rawErrorData)
 }
 
-
 func estimateGas(
 	ctx context.Context,
 	c *Chain,
@@ -445,7 +446,7 @@ func estimateGas(
 	doRound bool, // return rounded gas limit when gas limit is over
 	base_logger *log.RelayLogger,
 ) (uint64, error) {
-	logger := &log.RelayLogger{ Logger: base_logger.Logger }
+	logger := &log.RelayLogger{Logger: base_logger.Logger}
 
 	if rawTxData, err := tx.MarshalBinary(); err != nil {
 		logger.Error("failed to encode tx", err)
@@ -486,15 +487,15 @@ func estimateGas(
 	return txGasLimit, nil
 }
 
-
 type CallIter struct {
-	msgs []sdk.Msg
-	cursor int
+	msgs                       []sdk.Msg
+	cursor                     int
 	skipUpdateClientCommitment bool
 	// for multicall
-	txs []gethtypes.Transaction
+	txs          []gethtypes.Transaction
 	msgTypeNames []string
 }
+
 func NewCallIter(msgs []sdk.Msg, skipUpdateClientCommitment bool) CallIter {
 	msgTypeNames := make([]string, 0, len(msgs))
 	for i := 0; i < len(msgs); i++ {
@@ -502,11 +503,11 @@ func NewCallIter(msgs []sdk.Msg, skipUpdateClientCommitment bool) CallIter {
 		msgTypeNames = append(msgTypeNames, msgTypeName)
 	}
 
-	return CallIter {
-		msgs: msgs,
-		cursor: 0,
+	return CallIter{
+		msgs:                       msgs,
+		cursor:                     0,
 		skipUpdateClientCommitment: skipUpdateClientCommitment,
-		msgTypeNames: msgTypeNames,
+		msgTypeNames:               msgTypeNames,
 	}
 }
 func (iter *CallIter) Cursor() int {
@@ -519,11 +520,11 @@ func (iter *CallIter) End() bool {
 	return len(iter.msgs) <= iter.cursor
 }
 func (iter *CallIter) Next(n int) {
-	iter.cursor = min(len(iter.msgs), iter.cursor + n)
+	iter.cursor = min(len(iter.msgs), iter.cursor+n)
 }
 
 func (iter *CallIter) updateLoggerMessageInfo(logger *log.RelayLogger, from int, count int) {
-	if from < 0 || count < 0 || len(iter.msgs) <= from || len(iter.msgs) < from + count {
+	if from < 0 || count < 0 || len(iter.msgs) <= from || len(iter.msgs) < from+count {
 		logger.Error("invalid parameter", fmt.Errorf("out of index: len(msgs)=%d, from=%d, count=%d", len(iter.msgs), from, count))
 		return
 	}
@@ -531,16 +532,17 @@ func (iter *CallIter) updateLoggerMessageInfo(logger *log.RelayLogger, from int,
 	logger.Logger = logger.With(
 		logAttrMsgIndexFrom, from,
 		logAttrMsgCount, count,
-		logAttrMsgType, strings.Join(iter.msgTypeNames[from : from + count], ","),
+		logAttrMsgType, strings.Join(iter.msgTypeNames[from:from+count], ","),
 	)
 }
 
 type CallIterBuildResult struct {
-	tx *gethtypes.Transaction
+	tx    *gethtypes.Transaction
 	count int
 }
+
 func (iter *CallIter) BuildTx(ctx context.Context, c *Chain) (*CallIterBuildResult, error) {
-	if c.multicall3 == nil {
+	if c.multicall3 == nil || len(iter.msgs) == 1 {
 		return iter.buildSingleTx(ctx, c)
 	} else {
 		return iter.buildMultiTx(ctx, c)
@@ -555,7 +557,7 @@ func (iter *CallIter) buildSingleTx(ctx context.Context, c *Chain) (*CallIterBui
 	logger := c.GetChainLogger()
 	iter.updateLoggerMessageInfo(logger, iter.Cursor(), 1)
 
-	opts, err := c.TxOpts(ctx, true);
+	opts, err := c.TxOpts(ctx, true)
 	if err != nil {
 		return nil, err
 	}
@@ -583,18 +585,18 @@ func (iter *CallIter) buildSingleTx(ctx context.Context, c *Chain) (*CallIterBui
 		return nil, err
 	}
 
-	return &CallIterBuildResult{tx,1}, nil
+	return &CallIterBuildResult{tx, 1}, nil
 }
 
 func (iter *CallIter) buildMultiTx(ctx context.Context, c *Chain) (*CallIterBuildResult, error) {
-	if (iter.End()) {
+	if iter.End() {
 		return nil, nil
 	}
 	// now iter.cursor < len(iter.msgs)
 
 	logger := c.GetChainLogger()
 
-	opts, err := c.TxOpts(ctx, true);
+	opts, err := c.TxOpts(ctx, true)
 	if err != nil {
 		return nil, err
 	}
@@ -625,12 +627,12 @@ func (iter *CallIter) buildMultiTx(ctx context.Context, c *Chain) (*CallIterBuil
 	}
 
 	var (
-		lastOkCalls []multicall3.Multicall3Call = nil
-		lastOkGasLimit uint64 = 0
+		lastOkCalls    []multicall3.Multicall3Call = nil
+		lastOkGasLimit uint64                      = 0
 	)
 	count, err := findItems(
-		len(iter.msgs) - iter.Cursor(),
-		func(count int) (error) {
+		len(iter.msgs)-iter.Cursor(),
+		func(count int) error {
 			from := iter.Cursor()
 			to := from + count
 
@@ -640,7 +642,7 @@ func (iter *CallIter) buildMultiTx(ctx context.Context, c *Chain) (*CallIterBuil
 			calls := make([]multicall3.Multicall3Call, 0, count)
 			for i := from; i < to; i++ {
 				calls = append(calls, multicall3.Multicall3Call{
-					Target: *iter.txs[i].To(),
+					Target:   *iter.txs[i].To(),
 					CallData: iter.txs[i].Data(),
 				})
 			}
@@ -675,14 +677,14 @@ func (iter *CallIter) buildMultiTx(ctx context.Context, c *Chain) (*CallIterBuil
 		logger.Error("failed to build multicall tx with real send parameters", err)
 		return nil, err
 	}
-	return &CallIterBuildResult{tx,count}, nil
+	return &CallIterBuildResult{tx, count}, nil
 }
 
 func findItems(
 	size int,
-	f func(int) (error),
+	f func(int) error,
 ) (int, error) {
-	if (size <= 0) {
+	if size <= 0 {
 		return 0, fmt.Errorf("empty items")
 	}
 
@@ -697,4 +699,3 @@ func findItems(
 		return i, nil
 	}
 }
-
