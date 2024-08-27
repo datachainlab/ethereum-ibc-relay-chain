@@ -134,6 +134,16 @@ func (c *Chain) parseMsgEventLogs(logs []*types.Log) ([]core.MsgEventLog, error)
 				TimeoutHeight:    clienttypes.Height(ev.Packet.TimeoutHeight),
 				TimeoutTimestamp: time.Unix(0, int64(ev.Packet.TimeoutTimestamp)),
 			}
+		case abiChannelUpgradeOpen.ID:
+			ev, err := c.ibcHandler.ParseChannelUpgradeOpen(*log)
+			if err != nil {
+				return nil, fmt.Errorf("failed to parse ChannelUpgradeOpen event: logIndex=%d, log=%v", i, log)
+			}
+			event = &core.EventUpgradeChannel{
+				PortID:          ev.PortId,
+				ChannelID:       ev.ChannelId,
+				UpgradeSequence: ev.UpgradeSequence,
+			}
 		default:
 			event = &core.EventUnknown{Value: log}
 		}

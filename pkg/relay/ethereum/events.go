@@ -29,7 +29,8 @@ var (
 	abiSendPacket,
 	abiRecvPacket,
 	abiWriteAcknowledgement,
-	abiAcknowledgePacket abi.Event
+	abiAcknowledgePacket,
+	abiChannelUpgradeOpen abi.Event
 )
 
 func init() {
@@ -44,6 +45,7 @@ func init() {
 	abiRecvPacket = abiIBCHandler.Events["RecvPacket"]
 	abiWriteAcknowledgement = abiIBCHandler.Events["WriteAcknowledgement"]
 	abiAcknowledgePacket = abiIBCHandler.Events["AcknowledgePacket"]
+	abiChannelUpgradeOpen = abiIBCHandler.Events["ChannelUpgradeOpen"]
 }
 
 func (chain *Chain) findSentPackets(ctx core.QueryContext, fromHeight uint64) (core.PacketInfoList, error) {
