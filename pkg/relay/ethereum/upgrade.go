@@ -6,6 +6,8 @@ import (
 	"fmt"
 
 	"github.com/datachainlab/ethereum-ibc-relay-chain/pkg/contract/iibcchannelupgradablemodule"
+	"github.com/datachainlab/ethereum-ibc-relay-chain/pkg/contract/iibccontractupgradablemodule"
+	"github.com/ethereum/go-ethereum/common"
 	gethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/hyperledger-labs/yui-relayer/log"
 )
@@ -94,6 +96,51 @@ func (c *Chain) AllowTransitionToFlushComplete(
 	if err != nil {
 		return err
 	}
+
+	return processSendTxResult(ctx, logger, c, tx, err)
+}
+
+func (c *Chain) ProposeAppVersion(
+	ctx context.Context,
+	portID string,
+	version string,
+	implementation common.Address,
+	initialCalldata []byte,
+) error {
+	logger := c.GetChainLogger()
+	logger = &log.RelayLogger{Logger: logger.With(
+		logAttrPortID, portID,
+		logAttrVersion, version,
+		logAttrImplementation, implementation.Hex(),
+		logAttrInitialCalldata, hex.EncodeToString(initialCalldata),
+	)}
+
+	appAddr, err := c.ibcHandler.GetIBCModuleByPort(c.CallOpts(ctx, 0), portID)
+	if err != nil {
+		return err
+	}
+
+	mockApp, err := iibccontractupgradablemodule.NewIibccontractupgradablemodule(
+		appAddr,
+		c.client.Client,
+	)
+	if err != nil {
+		return nil
+	}
+
+	txOpts, err := c.TxOpts(ctx, true)
+	if err != nil {
+		return err
+	}
+
+	tx, err := mockApp.ProposeAppVersion(
+		txOpts,
+		version,
+		iibccontractupgradablemodule.IIBCContractUpgradableModuleAppInfo{
+			Implementation:  implementation,
+			InitialCalldata: initialCalldata,
+		},
+	)
 
 	return processSendTxResult(ctx, logger, c, tx, err)
 }

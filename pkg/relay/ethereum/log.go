@@ -18,4 +18,7 @@ const (
 	logAttrUpgradeFields   = "upgrade_fields"
 	logAttrTimeout         = "timeout"
 	logAttrUpgradeSequence = "upgrade_sequence"
+	logAttrVersion         = "version"
+	logAttrImplementation  = "implementation"
+	logAttrInitialCalldata = "initial_calldata"
 )

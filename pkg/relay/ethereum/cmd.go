@@ -8,6 +8,7 @@ import (
 	clienttypes "github.com/cosmos/ibc-go/v8/modules/core/02-client/types"
 	chantypes "github.com/cosmos/ibc-go/v8/modules/core/04-channel/types"
 	"github.com/datachainlab/ethereum-ibc-relay-chain/pkg/contract/iibcchannelupgradablemodule"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/hyperledger-labs/yui-relayer/config"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -35,6 +36,7 @@ func channelUpgradeCmd(ctx *config.Context) *cobra.Command {
 	cmd.AddCommand(
 		proposeUpgradeCmd(ctx),
 		allowTransitionToFlushCompleteCmd(ctx),
+		proposeAppVersionCmd(ctx),
 	)
 
 	return &cmd
@@ -164,6 +166,66 @@ func allowTransitionToFlushCompleteCmd(ctx *config.Context) *cobra.Command {
 	}
 
 	cmd.Flags().Uint64(flagUpgradeSequence, 0, "upgrade sequence")
+
+	return &cmd
+}
+
+func proposeAppVersionCmd(ctx *config.Context) *cobra.Command {
+	const (
+		flagVersion         = "version"
+		flagImplementation  = "implementation"
+		flagInitialCalldata = "initial-calldata"
+	)
+
+	cmd := cobra.Command{
+		Use:  "propose-app-version",
+		Args: cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			pathName := args[0]
+			chainID := args[1]
+
+			// get app version from flags
+			version, err := cmd.Flags().GetString(flagVersion)
+			if err != nil {
+				return err
+			}
+
+			// get the new implementation address from flags
+			var implementation common.Address
+			if bz, err := cmd.Flags().GetBytesHex(flagImplementation); err != nil {
+				return err
+			} else {
+				implementation = common.BytesToAddress(bz)
+			}
+
+			// get the initial calldata from flags
+			initialCalldata, err := cmd.Flags().GetBytesHex(flagInitialCalldata)
+			if err != nil {
+				return err
+			}
+
+			var ethChain *Chain
+			if chains, _, _, err := ctx.Config.ChainsFromPath(pathName); err != nil {
+				return err
+			} else if chain, ok := chains[chainID]; !ok {
+				return fmt.Errorf("chain not found: %s", chainID)
+			} else if ethChain, ok = chain.Chain.(*Chain); !ok {
+				return fmt.Errorf("chain is not ethereum: %T", chain.Chain)
+			}
+
+			return ethChain.ProposeAppVersion(
+				cmd.Context(),
+				ethChain.pathEnd.PortID,
+				version,
+				implementation,
+				initialCalldata,
+			)
+		},
+	}
+
+	cmd.Flags().String(flagVersion, "", "app version")
+	cmd.Flags().BytesHex(flagImplementation, nil, "new implementation")
+	cmd.Flags().BytesHex(flagInitialCalldata, nil, "initial calldata")
 
 	return &cmd
 }
