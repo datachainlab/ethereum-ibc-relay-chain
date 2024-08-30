@@ -1,5 +1,5 @@
 FORGE  ?= forge
-ABIGEN ?= docker run -u $$(id -u):$$(id -g) -v .:/workspace -w /workspace -it ethereum/client-go:alltools-v1.14.0 abigen
+ABIGEN ?= docker run -v .:/workspace -w /workspace -it ethereum/client-go:alltools-v1.14.0 abigen
 
 DOCKER := $(shell which docker)
 
@@ -16,17 +16,29 @@ submodule:
 	git submodule update --init
 	cd ./yui-ibc-solidity && npm install
 
+.PHONY: dep
+dep:
+	$(DOCKER) run --rm -v $$PWD:$$PWD -w $$PWD node:20 npm i
+	cd ./yui-ibc-solidity && $(DOCKER) run --rm -v $$PWD:$$PWD -w $$PWD node:20 npm i
+
 .PHONY: compile
 compile:
-	cp contract/*.sol ./yui-ibc-solidity/contracts/
+	$(FORGE) build
 	$(FORGE) build --config-path ./yui-ibc-solidity/foundry.toml
 
 .PHONY: abigen
 abigen: compile
-	@for a in IBCHandler Multicall3; do \
+	@mkdir -p ./build/abi
+	@for a in IBCHandler IIBCChannelUpgradableModule; do \
 	  b=$$(echo $$a | tr '[A-Z]' '[a-z]'); \
-	  mkdir -p ./build/abi ./pkg/contract/$$b; \
+	  mkdir -p ./pkg/contract/$$b; \
 	  jq -r '.abi' ./yui-ibc-solidity/out/$$a.sol/$$a.json > ./build/abi/$$a.abi; \
+	  $(ABIGEN) --abi ./build/abi/$$a.abi --pkg $$b --out ./pkg/contract/$$b/$$b.go; \
+	done
+	@for a in Multicall3 IIBCContractUpgradableModule; do \
+	  b=$$(echo $$a | tr '[A-Z]' '[a-z]'); \
+	  mkdir -p ./pkg/contract/$$b; \
+	  jq -r '.abi' ./out/$$a.sol/$$a.json > ./build/abi/$$a.abi; \
 	  $(ABIGEN) --abi ./build/abi/$$a.abi --pkg $$b --out ./pkg/contract/$$b/$$b.go; \
 	done
 
