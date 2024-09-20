@@ -47,6 +47,8 @@ type Chain struct {
 	ibcHandler *ibchandler.Ibchandler
 	multicall3 *multicall3.Multicall3
 
+	txMaxSize uint64
+
 	ethereumSigner EthereumSigner
 
 	errorRepository ErrorRepository
@@ -59,6 +61,8 @@ type Chain struct {
 var _ core.Chain = (*Chain)(nil)
 
 func NewChain(config ChainConfig) (*Chain, error) {
+	logger := GetModuleLogger()
+
 	id := big.NewInt(int64(config.EthChainId))
 	client, err := client.NewETHClient(
 		config.RpcAddr,
@@ -105,6 +109,11 @@ func NewChain(config ChainConfig) (*Chain, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to create error repository: %v", err)
 	}
+	txMaxSize := config.GetTxMaxSize()
+	if txMaxSize == 0 {
+		txMaxSize = 128 * 1024  // go-ethereum/core/txpool/legacypool/legacypool.go
+		logger.Info(fmt.Sprintf("txMaxSize is zero. set to %v", txMaxSize));
+	}
 
 	return &Chain{
 		config:  config,
@@ -117,6 +126,8 @@ func NewChain(config ChainConfig) (*Chain, error) {
 		ethereumSigner: *ethereumSigner,
 
 		errorRepository: errorRepository,
+
+		txMaxSize: txMaxSize,
 
 		allowLCFunctions: alfs,
 	}, nil

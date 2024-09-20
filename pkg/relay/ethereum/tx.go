@@ -60,7 +60,10 @@ func (c *Chain) SendMsgs(msgs []sdk.Msg) ([]core.MsgID, error) {
 			break
 		} else {
 			logger = iter.updateLoggerMessageInfo(logger, from, built.count)
-			logger = &log.RelayLogger{Logger: logger.With(logAttrTxHash, built.tx.Hash())}
+			logger = &log.RelayLogger{Logger: logger.With(
+				logAttrTxHash, built.tx.Hash(),
+				logAttrTxSize, built.tx.Size(),
+			)}
 		}
 
 		if rawTxData, err := built.tx.MarshalBinary(); err != nil {
@@ -745,6 +748,10 @@ func (iter *CallIter) buildMultiTx(ctx context.Context, c *Chain) (*CallIterBuil
 			multiTx, err := c.multicall3.Aggregate(opts, calls)
 			if err != nil {
 				return err
+			}
+
+			if 1 < count && c.txMaxSize < multiTx.Size() {
+				return fmt.Errorf("tx size exceeds txMaxSize: tx=%v, max=%v", multiTx.Size(), c.txMaxSize)
 			}
 
 			txGasLimit, err := estimateGas(ctx, c, multiTx, 1 == count, logger)
