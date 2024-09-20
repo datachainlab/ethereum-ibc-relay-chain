@@ -51,6 +51,8 @@ type Chain struct {
 
 	errorRepository ErrorRepository
 
+	txMaxSize uint64
+
 	// cache
 	connectionOpenedConfirmed bool
 	allowLCFunctions          *AllowLCFunctions
@@ -117,6 +119,8 @@ func NewChain(config ChainConfig) (*Chain, error) {
 		ethereumSigner: *ethereumSigner,
 
 		errorRepository: errorRepository,
+
+		txMaxSize: 1024 * 128, // go-ethereum/core/txpool/legacypool/legacypool.go
 
 		allowLCFunctions: alfs,
 	}, nil
