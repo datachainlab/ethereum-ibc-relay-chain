@@ -60,7 +60,10 @@ func (c *Chain) SendMsgs(msgs []sdk.Msg) ([]core.MsgID, error) {
 			break
 		} else {
 			logger = iter.updateLoggerMessageInfo(logger, from, built.count)
-			logger = &log.RelayLogger{Logger: logger.With(logAttrTxHash, built.tx.Hash())}
+			logger = &log.RelayLogger{Logger: logger.With(
+				logAttrTxHash, built.tx.Hash(),
+				logAttrTxSize, built.tx.Size(),
+			)}
 		}
 
 		if rawTxData, err := built.tx.MarshalBinary(); err != nil {

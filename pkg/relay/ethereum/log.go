@@ -8,6 +8,7 @@ const (
 	logAttrRawErrorData    = "raw_error_data"
 	logAttrRawTxData       = "raw_tx_data"
 	logAttrTxHash          = "tx_hash"
+	logAttrTxSize          = "tx_size"
 	logAttrBlockHash       = "block_hash"
 	logAttrBlockNumber     = "block_number"
 	logAttrTxIndex         = "tx_index"
