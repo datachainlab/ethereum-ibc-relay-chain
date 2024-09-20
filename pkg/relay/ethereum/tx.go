@@ -747,8 +747,8 @@ func (iter *CallIter) buildMultiTx(ctx context.Context, c *Chain) (*CallIterBuil
 				return err
 			}
 
-			if c.txMaxSize < multiTx.Size() {
-				return fmt.Errorf("tx exceeds txMaxSize");
+			if 1 < count && c.txMaxSize < multiTx.Size() {
+				return fmt.Errorf("tx size exceeds txMaxSize: tx=%v, max=%v", multiTx.Size(), c.txMaxSize)
 			}
 
 			txGasLimit, err := estimateGas(ctx, c, multiTx, 1 == count, logger)
