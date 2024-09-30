@@ -216,6 +216,7 @@ func proposeAppVersionCmd(ctx *config.Context) *cobra.Command {
 			return ethChain.ProposeAppVersion(
 				cmd.Context(),
 				ethChain.pathEnd.PortID,
+				ethChain.pathEnd.ChannelID,
 				version,
 				implementation,
 				initialCalldata,

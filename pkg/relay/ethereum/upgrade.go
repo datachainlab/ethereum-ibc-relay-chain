@@ -103,6 +103,7 @@ func (c *Chain) AllowTransitionToFlushComplete(
 func (c *Chain) ProposeAppVersion(
 	ctx context.Context,
 	portID string,
+	channelID string,
 	version string,
 	implementation common.Address,
 	initialCalldata []byte,
@@ -110,12 +111,13 @@ func (c *Chain) ProposeAppVersion(
 	logger := c.GetChainLogger()
 	logger = &log.RelayLogger{Logger: logger.With(
 		logAttrPortID, portID,
+		logAttrChannelID, channelID,
 		logAttrVersion, version,
 		logAttrImplementation, implementation.Hex(),
 		logAttrInitialCalldata, hex.EncodeToString(initialCalldata),
 	)}
 
-	appAddr, err := c.ibcHandler.GetIBCModuleByPort(c.CallOpts(ctx, 0), portID)
+	appAddr, err := c.ibcHandler.GetIBCModuleByChannel(c.CallOpts(ctx, 0), portID, channelID)
 	if err != nil {
 		return err
 	}
