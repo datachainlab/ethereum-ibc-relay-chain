@@ -44,12 +44,12 @@ abstract contract IBCContractUpgradableModuleBase is
     /**
      * @dev See {IIBCContractUpgradableModule-proposeAppVersion}
      */
-    function proposeAppVersion(string calldata version, AppInfo calldata appInfo_)
+    function proposeAppVersion(string calldata version, address implementation, bytes calldata initialCalldata)
         external
         override(IIBCContractUpgradableModule)
         onlyContractUpgrader
     {
-        if (appInfo_.implementation == address(0)) {
+        if (implementation == address(0)) {
             revert IBCContractUpgradableModuleAppInfoProposedWithZeroImpl();
         }
 
@@ -58,7 +58,11 @@ abstract contract IBCContractUpgradableModuleBase is
             revert IBCContractUpgradableModuleAppInfoIsAlreadySet();
         }
 
-        appInfos[version] = appInfo_;
+        appInfos[version] = AppInfo({
+            implementation: implementation,
+            initialCalldata: initialCalldata,
+            consumed: false
+        });
     }
 
     /**

@@ -136,10 +136,8 @@ func (c *Chain) ProposeAppVersion(
 	tx, err := mockApp.ProposeAppVersion(
 		txOpts,
 		version,
-		iibccontractupgradablemodule.IIBCContractUpgradableModuleAppInfo{
-			Implementation:  implementation,
-			InitialCalldata: initialCalldata,
-		},
+		implementation,
+		initialCalldata,
 	)
 
 	return processSendTxResult(ctx, logger, c, tx, err)

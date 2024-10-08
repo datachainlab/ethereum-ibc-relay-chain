@@ -38,7 +38,7 @@ type IIBCContractUpgradableModuleAppInfo struct {
 
 // IibccontractupgradablemoduleMetaData contains all meta data concerning the Iibccontractupgradablemodule contract.
 var IibccontractupgradablemoduleMetaData = &bind.MetaData{
-	ABI: "[{\"type\":\"function\",\"name\":\"getAppInfoProposal\",\"inputs\":[{\"name\":\"version\",\"type\":\"string\",\"internalType\":\"string\"}],\"outputs\":[{\"name\":\"\",\"type\":\"tuple\",\"internalType\":\"structIIBCContractUpgradableModule.AppInfo\",\"components\":[{\"name\":\"implementation\",\"type\":\"address\",\"internalType\":\"address\"},{\"name\":\"initialCalldata\",\"type\":\"bytes\",\"internalType\":\"bytes\"},{\"name\":\"consumed\",\"type\":\"bool\",\"internalType\":\"bool\"}]}],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"proposeAppVersion\",\"inputs\":[{\"name\":\"version\",\"type\":\"string\",\"internalType\":\"string\"},{\"name\":\"appInfo\",\"type\":\"tuple\",\"internalType\":\"structIIBCContractUpgradableModule.AppInfo\",\"components\":[{\"name\":\"implementation\",\"type\":\"address\",\"internalType\":\"address\"},{\"name\":\"initialCalldata\",\"type\":\"bytes\",\"internalType\":\"bytes\"},{\"name\":\"consumed\",\"type\":\"bool\",\"internalType\":\"bool\"}]}],\"outputs\":[],\"stateMutability\":\"nonpayable\"}]",
+	ABI: "[{\"type\":\"function\",\"name\":\"getAppInfoProposal\",\"inputs\":[{\"name\":\"version\",\"type\":\"string\",\"internalType\":\"string\"}],\"outputs\":[{\"name\":\"\",\"type\":\"tuple\",\"internalType\":\"structIIBCContractUpgradableModule.AppInfo\",\"components\":[{\"name\":\"implementation\",\"type\":\"address\",\"internalType\":\"address\"},{\"name\":\"initialCalldata\",\"type\":\"bytes\",\"internalType\":\"bytes\"},{\"name\":\"consumed\",\"type\":\"bool\",\"internalType\":\"bool\"}]}],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"proposeAppVersion\",\"inputs\":[{\"name\":\"version\",\"type\":\"string\",\"internalType\":\"string\"},{\"name\":\"implementation\",\"type\":\"address\",\"internalType\":\"address\"},{\"name\":\"initialCalldata\",\"type\":\"bytes\",\"internalType\":\"bytes\"}],\"outputs\":[],\"stateMutability\":\"nonpayable\"}]",
 }
 
 // IibccontractupgradablemoduleABI is the input ABI used to generate the binding from.
@@ -218,23 +218,23 @@ func (_Iibccontractupgradablemodule *IibccontractupgradablemoduleCallerSession) 
 	return _Iibccontractupgradablemodule.Contract.GetAppInfoProposal(&_Iibccontractupgradablemodule.CallOpts, version)
 }
 
-// ProposeAppVersion is a paid mutator transaction binding the contract method 0x347501f8.
+// ProposeAppVersion is a paid mutator transaction binding the contract method 0xd7c317e9.
 //
-// Solidity: function proposeAppVersion(string version, (address,bytes,bool) appInfo) returns()
-func (_Iibccontractupgradablemodule *IibccontractupgradablemoduleTransactor) ProposeAppVersion(opts *bind.TransactOpts, version string, appInfo IIBCContractUpgradableModuleAppInfo) (*types.Transaction, error) {
-	return _Iibccontractupgradablemodule.contract.Transact(opts, "proposeAppVersion", version, appInfo)
+// Solidity: function proposeAppVersion(string version, address implementation, bytes initialCalldata) returns()
+func (_Iibccontractupgradablemodule *IibccontractupgradablemoduleTransactor) ProposeAppVersion(opts *bind.TransactOpts, version string, implementation common.Address, initialCalldata []byte) (*types.Transaction, error) {
+	return _Iibccontractupgradablemodule.contract.Transact(opts, "proposeAppVersion", version, implementation, initialCalldata)
 }
 
-// ProposeAppVersion is a paid mutator transaction binding the contract method 0x347501f8.
+// ProposeAppVersion is a paid mutator transaction binding the contract method 0xd7c317e9.
 //
-// Solidity: function proposeAppVersion(string version, (address,bytes,bool) appInfo) returns()
-func (_Iibccontractupgradablemodule *IibccontractupgradablemoduleSession) ProposeAppVersion(version string, appInfo IIBCContractUpgradableModuleAppInfo) (*types.Transaction, error) {
-	return _Iibccontractupgradablemodule.Contract.ProposeAppVersion(&_Iibccontractupgradablemodule.TransactOpts, version, appInfo)
+// Solidity: function proposeAppVersion(string version, address implementation, bytes initialCalldata) returns()
+func (_Iibccontractupgradablemodule *IibccontractupgradablemoduleSession) ProposeAppVersion(version string, implementation common.Address, initialCalldata []byte) (*types.Transaction, error) {
+	return _Iibccontractupgradablemodule.Contract.ProposeAppVersion(&_Iibccontractupgradablemodule.TransactOpts, version, implementation, initialCalldata)
 }
 
-// ProposeAppVersion is a paid mutator transaction binding the contract method 0x347501f8.
+// ProposeAppVersion is a paid mutator transaction binding the contract method 0xd7c317e9.
 //
-// Solidity: function proposeAppVersion(string version, (address,bytes,bool) appInfo) returns()
-func (_Iibccontractupgradablemodule *IibccontractupgradablemoduleTransactorSession) ProposeAppVersion(version string, appInfo IIBCContractUpgradableModuleAppInfo) (*types.Transaction, error) {
-	return _Iibccontractupgradablemodule.Contract.ProposeAppVersion(&_Iibccontractupgradablemodule.TransactOpts, version, appInfo)
+// Solidity: function proposeAppVersion(string version, address implementation, bytes initialCalldata) returns()
+func (_Iibccontractupgradablemodule *IibccontractupgradablemoduleTransactorSession) ProposeAppVersion(version string, implementation common.Address, initialCalldata []byte) (*types.Transaction, error) {
+	return _Iibccontractupgradablemodule.Contract.ProposeAppVersion(&_Iibccontractupgradablemodule.TransactOpts, version, implementation, initialCalldata)
 }
