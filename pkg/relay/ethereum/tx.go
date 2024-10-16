@@ -34,6 +34,9 @@ func (c *Chain) SendMsgs(msgs []sdk.Msg) ([]core.MsgID, error) {
 		return nil, fmt.Errorf("failed to confirm connection opened: %w", err)
 	}
 	logger := c.GetChainLogger()
+	ethereumSignerLogger := c.ethereumSigner.GetLogger()
+	defer c.ethereumSigner.SetLogger(ethereumSignerLogger)
+
 	var msgIDs []core.MsgID
 	for i, msg := range msgs {
 		logger := &log.RelayLogger{Logger: logger.With(
@@ -45,6 +48,7 @@ func (c *Chain) SendMsgs(msgs []sdk.Msg) ([]core.MsgID, error) {
 		if err != nil {
 			return nil, err
 		}
+		c.ethereumSigner.SetLogger(logger);
 
 		// gas estimation
 		{
@@ -66,18 +70,8 @@ func (c *Chain) SendMsgs(msgs []sdk.Msg) ([]core.MsgID, error) {
 
 			estimatedGas, err := c.client.EstimateGasFromTx(ctx, tx)
 			if err != nil {
-				if revertReason, rawErrorData, err := c.getRevertReasonFromEstimateGas(err); err != nil {
-					// Raw error data may be available even if revert reason isn't available.
-					logger.Logger = logger.With(logAttrRawErrorData, hex.EncodeToString(rawErrorData))
-					logger.Error("failed to get revert reason", err)
-				} else {
-					logger.Logger = logger.With(
-						logAttrRawErrorData, hex.EncodeToString(rawErrorData),
-						logAttrRevertReason, revertReason,
-					)
-				}
-
-				logger.Error("failed to estimate gas", err)
+				revertReason, data := c.parseRpcError(err)
+				logger.Error("failed to estimate gas", err, logAttrRevertReason, revertReason, logAttrRawErrorData, data)
 				return nil, err
 			}
 
@@ -461,13 +455,13 @@ func (c *Chain) getRevertReasonFromReceipt(ctx context.Context, receipt *client.
 	return revertReason, errorData, nil
 }
 
-func (c *Chain) getRevertReasonFromEstimateGas(err error) (string, []byte, error) {
+func (c *Chain) getRevertReasonFromRpcError(err error) (string, []byte, error) {
 	if de, ok := err.(rpc.DataError); !ok {
-		return "", nil, fmt.Errorf("eth_estimateGas failed with unexpected error type: errorType=%T", err)
+		return "", nil, fmt.Errorf("failed with unexpected error type: errorType=%T", err)
 	} else if de.ErrorData() == nil {
-		return "", nil, fmt.Errorf("eth_estimateGas failed without error data")
+		return "", nil, fmt.Errorf("failed without error data")
 	} else if errorData, ok := de.ErrorData().(string); !ok {
-		return "", nil, fmt.Errorf("eth_estimateGas failed with unexpected error data type: errorDataType=%T", de.ErrorData())
+		return "", nil, fmt.Errorf("failed with unexpected error data type: errorDataType=%T", de.ErrorData())
 	} else {
 		errorData := common.FromHex(errorData)
 		revertReason, err := c.errorRepository.ParseError(errorData)
@@ -476,4 +470,13 @@ func (c *Chain) getRevertReasonFromEstimateGas(err error) (string, []byte, error
 		}
 		return revertReason, errorData, nil
 	}
+}
+
+func (c *Chain) parseRpcError(err error) (string, string) {
+	revertReason, rawErrorData, err := c.getRevertReasonFromRpcError(err)
+	if err != nil {
+		revertReason = fmt.Sprintf("failed to get revert reason: %s", err.Error())
+	}
+	// Note that Raw error data may be available even if revert reason isn't available.
+	return revertReason, hex.EncodeToString(rawErrorData)
 }
