@@ -40,7 +40,7 @@ interface IIBCContractUpgradableModule {
      *         To upgrade the IBC module contract along with a channel upgrade, the upgrader must
      *         call this function before calling `channelUpgradeInit` or `channelUpgradeTry` of the IBC handler.
      */
-    function proposeAppVersion(string calldata version, AppInfo calldata appInfo) external;
+    function proposeAppVersion(string calldata version, address implementation, bytes calldata initialCalldata) external;
 
 }
 

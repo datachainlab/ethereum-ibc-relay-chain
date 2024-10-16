@@ -4,4 +4,4 @@ This provides the ethereum chain module of [yui-relayer](https://github.com/hype
 
 ## Compatibility
 
-This module is compatible with [ibc-solidity v0.3.23](https://github.com/hyperledger-labs/yui-ibc-solidity/releases/tag/v0.3.23).
+This module is compatible with [ibc-solidity v0.3.39](https://github.com/hyperledger-labs/yui-ibc-solidity/releases/tag/v0.3.39).
