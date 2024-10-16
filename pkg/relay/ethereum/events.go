@@ -7,10 +7,12 @@ import (
 
 	clienttypes "github.com/cosmos/ibc-go/v8/modules/core/02-client/types"
 	channeltypes "github.com/cosmos/ibc-go/v8/modules/core/04-channel/types"
+	host "github.com/cosmos/ibc-go/v8/modules/core/24-host"
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/hyperledger-labs/yui-relayer/core"
 	"github.com/hyperledger-labs/yui-relayer/log"
 
@@ -43,6 +45,38 @@ func init() {
 	abiRecvPacket = abiIBCHandler.Events["RecvPacket"]
 	abiWriteAcknowledgement = abiIBCHandler.Events["WriteAcknowledgement"]
 	abiAcknowledgePacket = abiIBCHandler.Events["AcknowledgePacket"]
+
+}
+
+// filterPacketsWithActiveCommitment filters packets with non-zero packet commitments
+func (chain *Chain) filterPacketsWithActiveCommitment(ctx core.QueryContext, packets core.PacketInfoList) (core.PacketInfoList, error) {
+
+	var activePackets core.PacketInfoList
+
+	for _, packet := range packets {
+		commitmentPath := host.PacketCommitmentPath(packet.SourcePort, packet.SourceChannel, packet.Sequence)
+		commitmentKey := crypto.Keccak256([]byte(commitmentPath))
+		var fixedArray [32]byte
+		copy(fixedArray[:], commitmentKey) // Copy the slice into the fixed array
+
+		res, err := chain.ibcHandler.GetCommitment(
+			chain.callOptsFromQueryContext(ctx),
+			fixedArray,
+		)
+
+		if err != nil {
+			return packets, err
+		}
+
+		if res == [32]byte{0} {
+			continue
+		}
+
+		activePackets = append(activePackets, packet)
+
+	}
+
+	return activePackets, nil
 
 }
 

@@ -356,6 +356,12 @@ func (c *Chain) QueryUnfinalizedRelayPackets(ctx core.QueryContext, counterparty
 		return nil, err
 	}
 
+	packets, err = c.filterPacketsWithActiveCommitment(ctx, packets)
+	if err != nil {
+		logger.Error("failed to filter packets with active commitment", err)
+		return nil, err
+	}
+
 	counterpartyHeader, err := counterparty.GetLatestFinalizedHeader()
 	if err != nil {
 		logger.Error("failed to get latest finalized header", err)
