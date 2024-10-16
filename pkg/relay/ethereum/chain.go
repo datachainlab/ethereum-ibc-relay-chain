@@ -18,13 +18,15 @@ import (
 	host "github.com/cosmos/ibc-go/v8/modules/core/24-host"
 	ibcexported "github.com/cosmos/ibc-go/v8/modules/core/exported"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/hyperledger-labs/yui-relayer/core"
-	"github.com/hyperledger-labs/yui-relayer/signer"
 	"github.com/hyperledger-labs/yui-relayer/log"
+	"github.com/hyperledger-labs/yui-relayer/signer"
 
 	"github.com/datachainlab/ethereum-ibc-relay-chain/pkg/client"
 	"github.com/datachainlab/ethereum-ibc-relay-chain/pkg/contract/ibchandler"
+	"github.com/datachainlab/ethereum-ibc-relay-chain/pkg/contract/multicall3"
 )
 
 const (
@@ -43,6 +45,9 @@ type Chain struct {
 
 	client     *client.ETHClient
 	ibcHandler *ibchandler.Ibchandler
+	multicall3 *multicall3.Multicall3
+
+	txMaxSize uint64
 
 	ethereumSigner EthereumSigner
 
@@ -56,6 +61,8 @@ type Chain struct {
 var _ core.Chain = (*Chain)(nil)
 
 func NewChain(config ChainConfig) (*Chain, error) {
+	logger := GetModuleLogger()
+
 	id := big.NewInt(int64(config.EthChainId))
 	client, err := client.NewETHClient(
 		config.RpcAddr,
@@ -71,7 +78,18 @@ func NewChain(config ChainConfig) (*Chain, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	var multicall3_ *multicall3.Multicall3
+	if addr := config.Multicall3AddressAsAddress(); (addr != common.Address{}) {
+		contract, err := multicall3.NewMulticall3(addr, client)
+		if err != nil {
+			return nil, err
+		}
+		multicall3_ = contract
+	}
+
 	signer, err := config.Signer.GetCachedValue().(signer.SignerConfig).Build()
+
 	if err != nil {
 		return nil, fmt.Errorf("failed to build signer: %v", err)
 	}
@@ -91,6 +109,11 @@ func NewChain(config ChainConfig) (*Chain, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to create error repository: %v", err)
 	}
+	txMaxSize := config.GetTxMaxSize()
+	if txMaxSize == 0 {
+		txMaxSize = 128 * 1024  // go-ethereum/core/txpool/legacypool/legacypool.go
+		logger.Info(fmt.Sprintf("txMaxSize is zero. set to %v", txMaxSize));
+	}
 
 	return &Chain{
 		config:  config,
@@ -98,10 +121,13 @@ func NewChain(config ChainConfig) (*Chain, error) {
 		chainID: id,
 
 		ibcHandler: ibcHandler,
+		multicall3: multicall3_,
 
 		ethereumSigner: *ethereumSigner,
 
 		errorRepository: errorRepository,
+
+		txMaxSize: txMaxSize,
 
 		allowLCFunctions: alfs,
 	}, nil
@@ -259,10 +285,10 @@ var emptyConnRes = conntypes.NewQueryConnectionResponse(
 )
 
 // QueryConnection returns the remote end of a given connection
-func (c *Chain) QueryConnection(ctx core.QueryContext) (*conntypes.QueryConnectionResponse, error) {
+func (c *Chain) QueryConnection(ctx core.QueryContext, connectionID string) (*conntypes.QueryConnectionResponse, error) {
 	logger := c.GetChainLogger()
 	defer logger.TimeTrack(time.Now(), "QueryConnection")
-	conn, found, err := c.ibcHandler.GetConnection(c.callOptsFromQueryContext(ctx), c.pathEnd.ConnectionID)
+	conn, found, err := c.ibcHandler.GetConnection(c.callOptsFromQueryContext(ctx), connectionID)
 	if err != nil {
 		revertReason, data := c.parseRpcError(err)
 		logger.Error("failed to get connection", err, logAttrRevertReason, revertReason, logAttrRawErrorData, data)
@@ -465,6 +491,41 @@ func (c *Chain) QueryUnfinalizedRelayAcknowledgements(ctx core.QueryContext, cou
 	return packets, nil
 }
 
+// QueryChannelUpgrade returns the channel upgrade associated with a channelID
+func (c *Chain) QueryChannelUpgrade(ctx core.QueryContext) (*chantypes.QueryUpgradeResponse, error) {
+	if upg, found, err := c.ibcHandler.GetChannelUpgrade(c.callOptsFromQueryContext(ctx), c.pathEnd.PortID, c.pathEnd.ChannelID); err != nil {
+		return nil, err
+	} else if !found {
+		return nil, nil
+	} else {
+		return chantypes.NewQueryUpgradeResponse(upgradeToPB(upg), nil, ctx.Height().(clienttypes.Height)), nil
+	}
+}
+
+// QueryChannelUpgradeError returns the channel upgrade error receipt associated with a channelID at the height of `ctx`.
+// WARN: This error receipt may not be used to cancel upgrade in FLUSHCOMPLETE state because of upgrade sequence mismatch.
+func (c *Chain) QueryChannelUpgradeError(ctx core.QueryContext) (*chantypes.QueryUpgradeErrorResponse, error) {
+	if ev, err := c.findWriteErrorReceipt(ctx); err != nil {
+		return nil, err
+	} else if ev == nil {
+		return nil, nil
+	} else {
+		return &chantypes.QueryUpgradeErrorResponse{
+			ErrorReceipt: chantypes.ErrorReceipt{
+				Sequence: ev.UpgradeSequence,
+				Message:  ev.Message,
+			},
+		}, nil
+	}
+}
+
+// QueryCanTransitionToFlushComplete returns the channel can transition to FLUSHCOMPLETE state.
+// Basically it requires that there remains no inflight packets.
+// Maybe additional condition for transition is required by the IBC/APP module.
+func (c *Chain) QueryCanTransitionToFlushComplete(ctx core.QueryContext) (bool, error) {
+	return c.ibcHandler.GetCanTransitionToFlushComplete(c.callOptsFromQueryContext(ctx), c.pathEnd.PortID, c.pathEnd.ChannelID)
+}
+
 // QueryBalance returns the amount of coins in the relayer account
 func (c *Chain) QueryBalance(ctx core.QueryContext, address sdk.AccAddress) (sdk.Coins, error) {
 	panic("not supported")
@@ -502,6 +563,7 @@ func (c *Chain) confirmConnectionOpened(ctx context.Context) (bool, error) {
 	// NOTE: err is nil if the connection not found
 	connRes, err := c.QueryConnection(
 		core.NewQueryContext(ctx, latestHeight),
+		c.pathEnd.ConnectionID,
 	)
 	if err != nil {
 		return false, err

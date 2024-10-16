@@ -16,15 +16,31 @@ submodule:
 	git submodule update --init
 	cd ./yui-ibc-solidity && npm install
 
+.PHONY: dep
+dep:
+	$(DOCKER) run --rm -v $$PWD:$$PWD -w $$PWD node:20 npm i
+	cd ./yui-ibc-solidity && $(DOCKER) run --rm -v $$PWD:$$PWD -w $$PWD node:20 npm i
+
 .PHONY: compile
 compile:
+	$(FORGE) build
 	$(FORGE) build --config-path ./yui-ibc-solidity/foundry.toml
 
 .PHONY: abigen
 abigen: compile
-	@mkdir -p ./build/abi ./pkg/contract/ibchandler
-	@jq -r '.abi' ./yui-ibc-solidity/out/IBCHandler.sol/IBCHandler.json > ./build/abi/IBCHandler.abi
-	@$(ABIGEN) --abi ./build/abi/IBCHandler.abi --pkg ibchandler --out ./pkg/contract/ibchandler/ibchandler.go
+	@mkdir -p ./build/abi
+	@for a in IBCHandler IIBCChannelUpgradableModule; do \
+	  b=$$(echo $$a | tr '[A-Z]' '[a-z]'); \
+	  mkdir -p ./pkg/contract/$$b; \
+	  jq -r '.abi' ./yui-ibc-solidity/out/$$a.sol/$$a.json > ./build/abi/$$a.abi; \
+	  $(ABIGEN) --abi ./build/abi/$$a.abi --pkg $$b --out ./pkg/contract/$$b/$$b.go; \
+	done
+	@for a in Multicall3 IIBCContractUpgradableModule; do \
+	  b=$$(echo $$a | tr '[A-Z]' '[a-z]'); \
+	  mkdir -p ./pkg/contract/$$b; \
+	  jq -r '.abi' ./out/$$a.sol/$$a.json > ./build/abi/$$a.abi; \
+	  $(ABIGEN) --abi ./build/abi/$$a.abi --pkg $$b --out ./pkg/contract/$$b/$$b.go; \
+	done
 
 .PHONY: proto-gen proto-update-deps
 proto-gen:

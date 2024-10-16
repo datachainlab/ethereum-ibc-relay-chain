@@ -38,6 +38,10 @@ message ChainConfig {
   uint64 blocks_per_event_query = 16;
 
   repeated string abi_paths = 17;
+
+  string multicall3_address = 18;
+
+  optional uint64 tx_max_size = 19;
 }
 
 message AllowLCFunctionsConfig {

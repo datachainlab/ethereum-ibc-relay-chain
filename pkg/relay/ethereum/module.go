@@ -25,7 +25,7 @@ func (Module) RegisterInterfaces(registry codectypes.InterfaceRegistry) {
 
 // GetCmd returns the command
 func (Module) GetCmd(ctx *config.Context) *cobra.Command {
-	return nil
+	return ethereumCmd(ctx)
 }
 
 func GetModuleLogger() *log.RelayLogger {
