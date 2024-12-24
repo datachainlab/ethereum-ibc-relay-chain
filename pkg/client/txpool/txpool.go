@@ -94,6 +94,7 @@ func GetMinimumRequiredFee(ctx context.Context, client *ethclient.Client, addres
 	for _, pendingTx := range pendingTxs {
 		if uint64(pendingTx.Nonce) == nonce {
 			targetTx = pendingTx
+			break
 		}
 	}
 	if targetTx == nil {
