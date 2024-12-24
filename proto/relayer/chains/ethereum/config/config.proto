@@ -42,6 +42,8 @@ message ChainConfig {
   string multicall3_address = 18;
 
   optional uint64 tx_max_size = 19;
+
+  uint64 price_bump = 20;
 }
 
 message AllowLCFunctionsConfig {
