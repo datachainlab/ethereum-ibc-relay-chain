@@ -82,7 +82,7 @@ func inclByPercent(n *big.Int, percent uint64) {
 }
 
 // GetMinimumRequiredFee returns the minimum fee required to successfully send a transaction
-func GetMinimumRequiredFee(ctx context.Context, client *ethclient.Client, address common.Address, priceBump uint64) (*big.Int, *big.Int, error) {
+func GetMinimumRequiredFee(ctx context.Context, client *ethclient.Client, address common.Address, nonce uint64, priceBump uint64) (*big.Int, *big.Int, error) {
 	pendingTxs, err := PendingTransactions(ctx, client, address)
 	if err != nil {
 		return nil, nil, err
@@ -90,8 +90,18 @@ func GetMinimumRequiredFee(ctx context.Context, client *ethclient.Client, addres
 		return common.Big0, common.Big0, nil
 	}
 
-	gasFeeCap := pendingTxs[0].GasFeeCap.ToInt()
-	gasTipCap := pendingTxs[0].GasTipCap.ToInt()
+	var targetTx *RPCTransaction
+	for _, pendingTx := range pendingTxs {
+		if uint64(pendingTx.Nonce) == nonce {
+			targetTx = pendingTx
+		}
+	}
+	if targetTx == nil {
+		return common.Big0, common.Big0, nil
+	}
+
+	gasFeeCap := targetTx.GasFeeCap.ToInt()
+	gasTipCap := targetTx.GasTipCap.ToInt()
 
 	inclByPercent(gasFeeCap, priceBump)
 	inclByPercent(gasTipCap, priceBump)

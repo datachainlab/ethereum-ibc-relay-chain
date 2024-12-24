@@ -27,9 +27,9 @@ func NewGasFeeCalculator(client *client.ETHClient, config *ChainConfig) *GasFeeC
 func (m *GasFeeCalculator) Apply(ctx context.Context, txOpts *bind.TransactOpts) error {
 	minFeeCap := common.Big0
 	minTipCap := common.Big0
-	if m.config.PriceBump > 0 {
+	if m.config.PriceBump > 0 && txOpts.Nonce != nil {
 		var err error
-		if minFeeCap, minTipCap, err = txpool.GetMinimumRequiredFee(ctx, m.client.Client, txOpts.From, 10); err != nil {
+		if minFeeCap, minTipCap, err = txpool.GetMinimumRequiredFee(ctx, m.client.Client, txOpts.From, txOpts.Nonce.Uint64(), 10); err != nil {
 			return err
 		}
 	}
