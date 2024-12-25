@@ -16,11 +16,6 @@ import (
 	"github.com/ethereum/go-ethereum/node"
 )
 
-type account struct {
-	key  *ecdsa.PrivateKey
-	addr common.Address
-}
-
 func makeGenesisAlloc(t *testing.T, n int) ([]common.Address, types.GenesisAlloc) {
 	var addrs []common.Address
 	alloc := make(types.GenesisAlloc)
