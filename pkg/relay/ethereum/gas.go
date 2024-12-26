@@ -29,7 +29,7 @@ func (m *GasFeeCalculator) Apply(ctx context.Context, txOpts *bind.TransactOpts)
 	minTipCap := common.Big0
 	if m.config.PriceBump > 0 && txOpts.Nonce != nil {
 		var err error
-		if minFeeCap, minTipCap, err = txpool.GetMinimumRequiredFee(ctx, m.client.Client, txOpts.From, txOpts.Nonce.Uint64(), 10); err != nil {
+		if minFeeCap, minTipCap, err = txpool.GetMinimumRequiredFee(ctx, m.client.Client, txOpts.From, txOpts.Nonce.Uint64(), m.config.PriceBump); err != nil {
 			return err
 		}
 	}
