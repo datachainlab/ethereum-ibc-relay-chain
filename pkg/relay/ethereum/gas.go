@@ -3,10 +3,13 @@ package ethereum
 import (
 	"context"
 	"fmt"
+	"math/big"
+
 	"github.com/datachainlab/ethereum-ibc-relay-chain/pkg/client"
+	"github.com/datachainlab/ethereum-ibc-relay-chain/pkg/client/txpool"
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
-	"math/big"
+	"github.com/ethereum/go-ethereum/common"
 )
 
 type GasFeeCalculator struct {
@@ -22,11 +25,23 @@ func NewGasFeeCalculator(client *client.ETHClient, config *ChainConfig) *GasFeeC
 }
 
 func (m *GasFeeCalculator) Apply(ctx context.Context, txOpts *bind.TransactOpts) error {
+	minFeeCap := common.Big0
+	minTipCap := common.Big0
+	if m.config.PriceBump > 0 && txOpts.Nonce != nil {
+		var err error
+		if minFeeCap, minTipCap, err = txpool.GetMinimumRequiredFee(ctx, m.client.Client, txOpts.From, txOpts.Nonce.Uint64(), 10); err != nil {
+			return err
+		}
+	}
+
 	switch m.config.TxType {
 	case TxTypeLegacy:
 		gasPrice, err := m.client.SuggestGasPrice(ctx)
 		if err != nil {
 			return fmt.Errorf("failed to suggest gas price: %v", err)
+		}
+		if gasPrice.Cmp(minFeeCap) < 0 {
+			gasPrice = minFeeCap
 		}
 		txOpts.GasPrice = gasPrice
 		return nil
@@ -37,12 +52,18 @@ func (m *GasFeeCalculator) Apply(ctx context.Context, txOpts *bind.TransactOpts)
 		}
 		// GasTipCap = min(LimitPriorityFeePerGas, simulated_eth_maxPriorityFeePerGas * PriorityFeeRate)
 		m.config.DynamicTxGasConfig.PriorityFeeRate.Mul(gasTipCap)
+		if gasTipCap.Cmp(minTipCap) < 0 {
+			gasTipCap = minTipCap
+		}
 		if l := m.config.DynamicTxGasConfig.GetLimitPriorityFeePerGas(); l.Sign() > 0 && gasTipCap.Cmp(l) > 0 {
 			gasTipCap = l
 		}
 		// GasFeeCap = min(LimitFeePerGas, GasTipCap + BaseFee * BaseFeeRate)
 		m.config.DynamicTxGasConfig.BaseFeeRate.Mul(gasFeeCap)
 		gasFeeCap.Add(gasFeeCap, gasTipCap)
+		if gasFeeCap.Cmp(minFeeCap) < 0 {
+			gasFeeCap = minFeeCap
+		}
 		if l := m.config.DynamicTxGasConfig.GetLimitFeePerGas(); l.Sign() > 0 && gasFeeCap.Cmp(l) > 0 {
 			gasFeeCap = l
 		}
