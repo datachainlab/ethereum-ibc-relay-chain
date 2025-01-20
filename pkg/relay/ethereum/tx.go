@@ -553,7 +553,7 @@ func estimateGas(
 		logger = &log.RelayLogger{Logger: logger.With(logAttrRawTxData, hex.EncodeToString(rawTxData))}
 	}
 
-	estimatedGas, err := c.client.EstimateGasFromTx(ctx, tx)
+	estimatedGas, err := c.client.EstimateGasFromTx(ctx, tx, c.ethereumSigner.Address())
 	if err != nil {
 		if revertReason, rawErrorData, err := c.getRevertReasonFromRpcError(err); err != nil {
 			// Raw error data may be available even if revert reason isn't available.
@@ -666,7 +666,9 @@ func (iter *CallIter) buildSingleTx(ctx context.Context, c *Chain) (*CallIterBui
 	// gas estimation
 	{
 		opts.GasLimit = math.MaxUint64
+		c.ethereumSigner.NoSign = true
 		tx, err := c.BuildMessageTx(opts, iter.Current(), iter.skipUpdateClientCommitment)
+		c.ethereumSigner.NoSign = false
 		if err != nil {
 			logger.Error("failed to build tx for gas estimation", err)
 			return nil, err
@@ -679,6 +681,7 @@ func (iter *CallIter) buildSingleTx(ctx context.Context, c *Chain) (*CallIterBui
 		opts.GasLimit = txGasLimit
 	}
 
+	c.ethereumSigner.NoSign = false
 	tx, err := c.BuildMessageTx(opts, iter.Current(), iter.skipUpdateClientCommitment)
 	if err != nil {
 		logger.Error("failed to build tx", err)
@@ -710,7 +713,9 @@ func (iter *CallIter) buildMultiTx(ctx context.Context, c *Chain) (*CallIterBuil
 			logger := iter.updateLoggerMessageInfo(logger, i, 1)
 
 			// note that its nonce is not checked
+			c.ethereumSigner.NoSign = true
 			tx, err := c.BuildMessageTx(opts, iter.msgs[i], iter.skipUpdateClientCommitment)
+			c.ethereumSigner.NoSign = false
 			if err != nil {
 				logger.Error("failed to build tx for gas estimation", err)
 				return nil, err
@@ -745,7 +750,9 @@ func (iter *CallIter) buildMultiTx(ctx context.Context, c *Chain) (*CallIterBuil
 				})
 			}
 
+			c.ethereumSigner.NoSign = true
 			multiTx, err := c.multicall3.Aggregate(opts, calls)
+			c.ethereumSigner.NoSign = false
 			if err != nil {
 				return err
 			}
@@ -774,6 +781,7 @@ func (iter *CallIter) buildMultiTx(ctx context.Context, c *Chain) (*CallIterBuil
 	opts.GasLimit = lastOkGasLimit
 
 	// add raw tx to log attribute
+	c.ethereumSigner.NoSign = false
 	tx, err := c.multicall3.Aggregate(opts, lastOkCalls)
 	if err != nil {
 		logger.Error("failed to build multicall tx with real send parameters", err)
