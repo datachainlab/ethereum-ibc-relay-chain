@@ -26,16 +26,16 @@ func (chain *Chain) TxOpts(ctx context.Context, useLatestNonce bool) (*bind.Tran
 		Signer: chain.ethereumSigner.Sign,
 	}
 
-	if err := NewGasFeeCalculator(chain.client, &chain.config).Apply(ctx, txOpts); err != nil {
-		return nil, err
-	}
-
 	if useLatestNonce {
 		if nonce, err := chain.client.NonceAt(ctx, addr, nil); err != nil {
 			return nil, err
 		} else {
 			txOpts.Nonce = new(big.Int).SetUint64(nonce)
 		}
+	}
+
+	if err := NewGasFeeCalculator(chain.client, &chain.config).Apply(ctx, txOpts); err != nil {
+		return nil, err
 	}
 
 	return txOpts, nil
