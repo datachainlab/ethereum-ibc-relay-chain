@@ -13,11 +13,11 @@ import (
 )
 
 type GasFeeCalculator struct {
-	client *client.ETHClient
+	client client.IETHClient
 	config *ChainConfig
 }
 
-func NewGasFeeCalculator(client *client.ETHClient, config *ChainConfig) *GasFeeCalculator {
+func NewGasFeeCalculator(client client.IETHClient, config *ChainConfig) *GasFeeCalculator {
 	return &GasFeeCalculator{
 		client: client,
 		config: config,
@@ -27,18 +27,21 @@ func NewGasFeeCalculator(client *client.ETHClient, config *ChainConfig) *GasFeeC
 func (m *GasFeeCalculator) Apply(ctx context.Context, txOpts *bind.TransactOpts) error {
 	minFeeCap := common.Big0
 	minTipCap := common.Big0
+	var oldTx *client.RPCTransaction
 	if m.config.PriceBump > 0 && txOpts.Nonce != nil {
 		var err error
-		if minFeeCap, minTipCap, err = txpool.GetMinimumRequiredFee(ctx, m.client.Client, txOpts.From, txOpts.Nonce.Uint64(), m.config.PriceBump); err != nil {
+		if oldTx, minFeeCap, minTipCap, err = txpool.GetMinimumRequiredFee(ctx, m.client, txOpts.From, txOpts.Nonce.Uint64(), m.config.PriceBump); err != nil {
 			return err
 		}
 	}
-
 	switch m.config.TxType {
 	case TxTypeLegacy:
 		gasPrice, err := m.client.SuggestGasPrice(ctx)
 		if err != nil {
 			return fmt.Errorf("failed to suggest gas price: %v", err)
+		}
+		if oldTx != nil && oldTx.GasPrice != nil && oldTx.GasPrice.ToInt().Cmp(gasPrice) > 0 {
+			return fmt.Errorf("old tx's gasPrice(%v) is higher than suggestion(%v)", oldTx.GasPrice.ToInt(), gasPrice)
 		}
 		if gasPrice.Cmp(minFeeCap) < 0 {
 			gasPrice = minFeeCap
@@ -52,6 +55,9 @@ func (m *GasFeeCalculator) Apply(ctx context.Context, txOpts *bind.TransactOpts)
 		}
 		// GasTipCap = min(LimitPriorityFeePerGas, simulated_eth_maxPriorityFeePerGas * PriorityFeeRate)
 		m.config.DynamicTxGasConfig.PriorityFeeRate.Mul(gasTipCap)
+		if oldTx != nil && oldTx.GasTipCap != nil && oldTx.GasTipCap.ToInt().Cmp(gasTipCap) > 0 {
+			return fmt.Errorf("old tx's gasTipCap(%v) is higher than suggestion(%v)", oldTx.GasTipCap.ToInt(), gasTipCap)
+		}
 		if gasTipCap.Cmp(minTipCap) < 0 {
 			gasTipCap = minTipCap
 		}
@@ -61,6 +67,9 @@ func (m *GasFeeCalculator) Apply(ctx context.Context, txOpts *bind.TransactOpts)
 		// GasFeeCap = min(LimitFeePerGas, GasTipCap + BaseFee * BaseFeeRate)
 		m.config.DynamicTxGasConfig.BaseFeeRate.Mul(gasFeeCap)
 		gasFeeCap.Add(gasFeeCap, gasTipCap)
+		if oldTx != nil && oldTx.GasFeeCap != nil && oldTx.GasFeeCap.ToInt().Cmp(gasFeeCap) > 0 {
+			return fmt.Errorf("old tx's gasFeeCap(%v) is higher than suggestion(%v)", oldTx.GasFeeCap.ToInt(), gasFeeCap)
+		}
 		if gasFeeCap.Cmp(minFeeCap) < 0 {
 			gasFeeCap = minFeeCap
 		}

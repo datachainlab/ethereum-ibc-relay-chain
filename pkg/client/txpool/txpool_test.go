@@ -7,6 +7,7 @@ import (
 	"testing"
 	"unsafe"
 
+	"github.com/datachainlab/ethereum-ibc-relay-chain/pkg/client"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -44,16 +45,20 @@ func getPrivateKey(t *testing.T, account types.Account) *ecdsa.PrivateKey {
 	return key
 }
 
-func getEthClient(sim *simulated.Backend) *ethclient.Client {
+func getEthClient(t *testing.T, sim *simulated.Backend) client.IETHClient {
 	type simClient struct {
 		*ethclient.Client
 	}
 	ifceCli := sim.Client()
 	ptrCli := unsafe.Add(unsafe.Pointer(&ifceCli), unsafe.Sizeof(uintptr(0)))
-	return (*simClient)(ptrCli).Client
+	cli, err := client.NewETHClientWith((*simClient)(ptrCli).Client)
+	if err != nil {
+		t.Fatalf("failed to create client: err=%v", err)
+	}
+	return cli
 }
 
-func transfer(t *testing.T, ctx context.Context, client *ethclient.Client, signer types.Signer, key *ecdsa.PrivateKey, nonce uint64, gasTipCap, gasFeeCap *big.Int, to common.Address, amount *big.Int) {
+func transfer(t *testing.T, ctx context.Context, cl client.IETHClient, signer types.Signer, key *ecdsa.PrivateKey, nonce uint64, gasTipCap, gasFeeCap *big.Int, to common.Address, amount *big.Int) {
 	tx := types.NewTx(&types.DynamicFeeTx{
 		Nonce:     nonce,
 		GasTipCap: gasTipCap,
@@ -68,15 +73,15 @@ func transfer(t *testing.T, ctx context.Context, client *ethclient.Client, signe
 		t.Fatalf("failed to sign tx: err=%v", err)
 	}
 
-	if err := client.SendTransaction(ctx, tx); err != nil {
+	if err := cl.Inner().SendTransaction(ctx, tx); err != nil {
 		t.Fatalf("failed to send tx: err=%v", err)
 	}
 }
 
-func replace(t *testing.T, ctx context.Context, client *ethclient.Client, signer types.Signer, key *ecdsa.PrivateKey, priceBump uint64, nonce uint64, gasTipCap, gasFeeCap *big.Int, to common.Address, amount *big.Int) {
+func replace(t *testing.T, ctx context.Context, cl client.IETHClient, signer types.Signer, key *ecdsa.PrivateKey, priceBump uint64, nonce uint64, gasTipCap, gasFeeCap *big.Int, to common.Address, amount *big.Int) {
 	addr := crypto.PubkeyToAddress(key.PublicKey)
 
-	if minFeeCap, minTipCap, err := GetMinimumRequiredFee(ctx, client, addr, nonce, priceBump); err != nil {
+	if _, minFeeCap, minTipCap, err := GetMinimumRequiredFee(ctx, cl, addr, nonce, priceBump); err != nil {
 		t.Fatalf("failed to get the minimum fee required to replace tx: err=%v", err)
 	} else if minFeeCap.Cmp(common.Big0) == 0 {
 		t.Fatalf("tx to replace not found")
@@ -92,7 +97,7 @@ func replace(t *testing.T, ctx context.Context, client *ethclient.Client, signer
 		}
 	}
 
-	transfer(t, ctx, client, signer, key, nonce, gasTipCap, gasFeeCap, to, amount)
+	transfer(t, ctx, cl, signer, key, nonce, gasTipCap, gasFeeCap, to, amount)
 }
 
 func TestContentFrom(t *testing.T) {
@@ -109,10 +114,10 @@ func TestContentFrom(t *testing.T) {
 	})
 	defer sim.Close()
 
-	cli := getEthClient(sim)
+	cli := getEthClient(t, sim)
 
 	// make signer
-	chainID, err := cli.ChainID(ctx)
+	chainID, err := cli.Inner().ChainID(ctx)
 	if err != nil {
 		t.Fatalf("failed to get chain ID: err=%v", err)
 	}
@@ -129,7 +134,7 @@ func TestContentFrom(t *testing.T) {
 	}
 
 	// check block info
-	block, err := cli.BlockByNumber(ctx, nil)
+	block, err := cli.Inner().BlockByNumber(ctx, nil)
 	if err != nil {
 		t.Fatalf("failed to get block by number: err=%v", err)
 	} else {
@@ -140,7 +145,7 @@ func TestContentFrom(t *testing.T) {
 	sim.Commit()
 
 	// check block info
-	block, err = cli.BlockByNumber(ctx, nil)
+	block, err = cli.Inner().BlockByNumber(ctx, nil)
 	if err != nil {
 		t.Fatalf("failed to get block by number: err=%v", err)
 	} else {
@@ -163,7 +168,7 @@ func TestContentFrom(t *testing.T) {
 	sim.Commit()
 
 	// check block info
-	block, err = cli.BlockByNumber(ctx, nil)
+	block, err = cli.Inner().BlockByNumber(ctx, nil)
 	if err != nil {
 		t.Fatalf("failed to get block by number: err=%v", err)
 	} else {

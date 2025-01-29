@@ -16,6 +16,41 @@ import (
 	"github.com/ethereum/go-ethereum/rpc"
 )
 
+// RPCTransaction represents a transaction that will serialize to the RPC representation of a transaction
+type RPCTransaction struct {
+	BlockHash           *common.Hash      `json:"blockHash"`
+	BlockNumber         *hexutil.Big      `json:"blockNumber"`
+	From                common.Address    `json:"from"`
+	Gas                 hexutil.Uint64    `json:"gas"`
+	GasPrice            *hexutil.Big      `json:"gasPrice"`
+	GasFeeCap           *hexutil.Big      `json:"maxFeePerGas,omitempty"`
+	GasTipCap           *hexutil.Big      `json:"maxPriorityFeePerGas,omitempty"`
+	MaxFeePerBlobGas    *hexutil.Big      `json:"maxFeePerBlobGas,omitempty"`
+	Hash                common.Hash       `json:"hash"`
+	Input               hexutil.Bytes     `json:"input"`
+	Nonce               hexutil.Uint64    `json:"nonce"`
+	To                  *common.Address   `json:"to"`
+	TransactionIndex    *hexutil.Uint64   `json:"transactionIndex"`
+	Value               *hexutil.Big      `json:"value"`
+	Type                hexutil.Uint64    `json:"type"`
+	Accesses            *gethtypes.AccessList `json:"accessList,omitempty"`
+	ChainID             *hexutil.Big      `json:"chainId,omitempty"`
+	BlobVersionedHashes []common.Hash     `json:"blobVersionedHashes,omitempty"`
+	V                   *hexutil.Big      `json:"v"`
+	R                   *hexutil.Big      `json:"r"`
+	S                   *hexutil.Big      `json:"s"`
+	YParity             *hexutil.Uint64   `json:"yParity,omitempty"`
+}
+
+// wrapping interface of ethclient.Client struct
+type IETHClient interface {
+	Inner() *ethclient.Client
+	SuggestGasPrice(ctx context.Context) (*big.Int, error)
+	HeaderByNumber(ctx context.Context, number *big.Int) (*gethtypes.Header, error);
+	FeeHistory(ctx context.Context, blockCount uint64, lastBlock *big.Int, rewardPercentiles []float64) (*ethereum.FeeHistory, error)
+	ContentFrom(ctx context.Context, address common.Address) (map[string]map[string]*RPCTransaction, error);
+}
+
 type ETHClient struct {
 	*ethclient.Client
 	option option
@@ -47,18 +82,45 @@ func NewETHClient(endpoint string, opts ...Option) (*ETHClient, error) {
 	if err != nil {
 		return nil, err
 	}
+	return NewETHClientWith(ethclient.NewClient(rpcClient), opts...)
+}
+
+func NewETHClientWith(cli *ethclient.Client, opts ...Option) (*ETHClient, error) {
 	opt := DefaultOption()
 	for _, o := range opts {
 		o(opt)
 	}
 	return &ETHClient{
-		Client: ethclient.NewClient(rpcClient),
+		Client: cli,
 		option: *opt,
 	}, nil
 }
 
 func (cl *ETHClient) Raw() *rpc.Client {
 	return cl.Client.Client()
+}
+
+// implements IETHClient
+func (cl *ETHClient) Inner() *ethclient.Client {
+	return cl.Client
+}
+func (cl *ETHClient) SuggestGasPrice(ctx context.Context) (*big.Int, error) {
+	return cl.Client.SuggestGasPrice(ctx)
+}
+func (cl *ETHClient) HeaderByNumber(ctx context.Context, number *big.Int) (*gethtypes.Header, error) {
+	return cl.Client.HeaderByNumber(ctx, number)
+}
+func (cl *ETHClient) FeeHistory(ctx context.Context, blockCount uint64, lastBlock *big.Int, rewardPercentiles []float64) (*ethereum.FeeHistory, error) {
+	return cl.Client.FeeHistory(ctx, blockCount, lastBlock, rewardPercentiles)
+}
+
+// ContentFrom calls `txpool_contentFrom` of the Ethereum RPC
+func (cl *ETHClient) ContentFrom(ctx context.Context, address common.Address) (map[string]map[string]*RPCTransaction, error) {
+	var res map[string]map[string]*RPCTransaction
+	if err := cl.Client.Client().CallContext(ctx, &res, "txpool_contentFrom", address); err != nil {
+		return nil, err
+	}
+	return res, nil
 }
 
 func (cl *ETHClient) GetTransactionReceipt(ctx context.Context, txHash common.Hash) (rc *Receipt, err error) {

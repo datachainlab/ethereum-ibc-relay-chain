@@ -2,8 +2,12 @@ package ethereum
 
 import (
 	"context"
+
 	"github.com/datachainlab/ethereum-ibc-relay-chain/pkg/client"
 	"github.com/ethereum/go-ethereum"
+	gethtypes "github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"math/big"
 	"testing"
@@ -128,4 +132,155 @@ func Test_getFeeInfo(t *testing.T) {
 		t.Fatal("unexpected")
 	}
 
+}
+
+type MockETHClient struct {
+	client.IETHClient
+	MockSuggestGasPrice big.Int
+	MockContentFrom map[string]map[string]*client.RPCTransaction
+	MockLatestHeaderNumber big.Int
+	MockHistoryGasTipCap big.Int
+	MockHistoryGasFeeCap big.Int
+}
+func (cl *MockETHClient) SuggestGasPrice(ctx context.Context) (*big.Int, error) {
+	return &cl.MockSuggestGasPrice, nil
+}
+func (cl *MockETHClient) ContentFrom(ctx context.Context, address common.Address) (map[string]map[string]*client.RPCTransaction, error) {
+	return cl.MockContentFrom, nil
+}
+func (cl *MockETHClient) HeaderByNumber(ctx context.Context, number *big.Int) (*gethtypes.Header, error) {
+	if number != nil {
+		return &gethtypes.Header{
+			Number: big.NewInt(0).Set(number),
+		}, nil
+	} else {
+		return &gethtypes.Header{
+			Number: &cl.MockLatestHeaderNumber,
+		}, nil
+	}
+}
+func (cl *MockETHClient) FeeHistory(ctx context.Context, blockCount uint64, lastBlock *big.Int, rewardPercentiles []float64) (*ethereum.FeeHistory, error) {
+	return &ethereum.FeeHistory{
+		Reward: [][]*big.Int{ // gasTipCap
+			{ &cl.MockHistoryGasTipCap, },
+		},
+		BaseFee: []*big.Int{ // baseFee. This is used as gasFeeCap
+			&cl.MockHistoryGasFeeCap,
+		},
+	}, nil
+}
+
+func TestPriceBumpLegacy(t *testing.T) {
+	cli := MockETHClient{}
+	config := createConfig()
+	config.TxType = TxTypeLegacy
+	config.PriceBump = 10
+	calculator := NewGasFeeCalculator(&cli, config)
+
+	txOpts := &bind.TransactOpts{}
+	txOpts.Nonce = big.NewInt(1)
+
+	cli.MockContentFrom = map[string]map[string]*client.RPCTransaction{
+		"pending": {
+			"dummyaddr": &client.RPCTransaction{
+				GasPrice: (*hexutil.Big)(big.NewInt(100)),
+				GasTipCap: (*hexutil.Big)(big.NewInt(200)),
+				GasFeeCap: (*hexutil.Big)(big.NewInt(300)),
+				Nonce: (hexutil.Uint64)(txOpts.Nonce.Uint64()),
+			},
+		},
+	}
+
+	// test that gasPrice is bumped from old tx's gasFeeCap
+	{
+		cli.MockSuggestGasPrice.SetUint64(100)
+		if err := calculator.Apply(context.Background(), txOpts); err != nil {
+			t.Fatal(err)
+		}
+		if txOpts.GasPrice.Uint64() != 330 { //gasFeeCap * 1.1
+			t.Errorf("gasPrice should be 330 but %v", txOpts.GasPrice)
+		}
+	}
+
+	// test that old tx's gasPrice is already exceeds suggestion
+	{
+		cli.MockSuggestGasPrice.SetUint64(99)
+		err := calculator.Apply(context.Background(), txOpts)
+		if err == nil || err.Error() != "old tx's gasPrice(100) is higher than suggestion(99)" {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestPriceBumpDynamic(t *testing.T) {
+	cli := MockETHClient{}
+	config := createConfig()
+	config.TxType = TxTypeDynamic
+	config.PriceBump = 100 //double
+	config.DynamicTxGasConfig.LimitFeePerGas = "1ether"
+	config.DynamicTxGasConfig.LimitPriorityFeePerGas = "1ether"
+	config.DynamicTxGasConfig.BaseFeeRate = &Fraction{
+		Numerator: 1,
+		Denominator: 1,
+	}
+	config.DynamicTxGasConfig.PriorityFeeRate = &Fraction{
+		Numerator: 1,
+		Denominator: 1,
+	}
+
+	calculator := NewGasFeeCalculator(&cli, config)
+
+	txOpts := &bind.TransactOpts{}
+	txOpts.Nonce = big.NewInt(1)
+
+	cli.MockLatestHeaderNumber.SetUint64(1000)
+	cli.MockContentFrom = map[string]map[string]*client.RPCTransaction{
+		"pending": {
+			"dummyaddr": &client.RPCTransaction{
+				GasPrice: (*hexutil.Big)(big.NewInt(100)),
+				GasTipCap: (*hexutil.Big)(big.NewInt(200)),
+				GasFeeCap: (*hexutil.Big)(big.NewInt(300)),
+				Nonce: (hexutil.Uint64)(txOpts.Nonce.Uint64()),
+			},
+		},
+	}
+
+	// test that gasTipCap and gasFeeCap are bumped from old tx's one
+	{
+		// set suggenstion between old value and bump value to apply bump value
+		cli.MockHistoryGasTipCap.SetUint64(201)
+		cli.MockHistoryGasFeeCap.SetUint64(301 - 201) // note that gasTipCap is added to gasFeeCap
+		if err := calculator.Apply(context.Background(), txOpts); err != nil {
+			t.Fatal(err)
+		}
+		if txOpts.GasTipCap.Uint64() != 400 {
+			t.Errorf("gasTipCap should be 400 but %v", txOpts.GasTipCap)
+		}
+		if txOpts.GasFeeCap.Uint64() != 600 {
+			t.Errorf("gasFeeCap should be 600 but %v", txOpts.GasFeeCap)
+		}
+	}
+
+	// test that old tx's gasTipCap is already exceeds suggestion
+	{
+		cli.MockHistoryGasTipCap.SetUint64(199)
+		err := calculator.Apply(context.Background(), txOpts)
+		if err == nil || err.Error() != "old tx's gasTipCap(200) is higher than suggestion(199)" {
+			t.Fatal(err)
+		}
+	}
+
+	// test that old tx's gasFeeCap is already exceeds suggestion
+	{
+		// Because gasTipCap suggestion is added to gasFeeCap suggenstion,
+		// gasTipCap suggestion should be lower than old tx's gasFeeCap
+		cli.MockContentFrom["pending"]["dummyaddr"].GasTipCap = (*hexutil.Big)(big.NewInt(100))
+		cli.MockContentFrom["pending"]["dummyaddr"].GasFeeCap = (*hexutil.Big)(big.NewInt(300))
+		cli.MockHistoryGasTipCap.SetUint64(199)
+		cli.MockHistoryGasFeeCap.SetUint64(299 - 200)
+		err := calculator.Apply(context.Background(), txOpts)
+		if err == nil || err.Error() != "old tx's gasFeeCap(300) is higher than suggestion(299)" {
+			t.Fatal(err)
+		}
+	}
 }
