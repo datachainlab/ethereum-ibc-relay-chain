@@ -681,7 +681,6 @@ func (iter *CallIter) buildSingleTx(ctx context.Context, c *Chain) (*CallIterBui
 		opts.GasLimit = txGasLimit
 	}
 
-	c.ethereumSigner.NoSign = false
 	tx, err := c.BuildMessageTx(opts, iter.Current(), iter.skipUpdateClientCommitment)
 	if err != nil {
 		logger.Error("failed to build tx", err)
@@ -781,7 +780,6 @@ func (iter *CallIter) buildMultiTx(ctx context.Context, c *Chain) (*CallIterBuil
 	opts.GasLimit = lastOkGasLimit
 
 	// add raw tx to log attribute
-	c.ethereumSigner.NoSign = false
 	tx, err := c.multicall3.Aggregate(opts, lastOkCalls)
 	if err != nil {
 		logger.Error("failed to build multicall tx with real send parameters", err)
