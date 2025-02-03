@@ -190,12 +190,7 @@ func (c *CallFrame) UnmarshalJSON(input []byte) error {
 	return nil
 }
 
-func (cl *ETHClient) EstimateGasFromTx(ctx context.Context, tx *gethtypes.Transaction) (uint64, error) {
-	from, err := gethtypes.LatestSignerForChainID(tx.ChainId()).Sender(tx)
-	if err != nil {
-		return 0, err
-	}
-
+func (cl *ETHClient) EstimateGasFromTx(ctx context.Context, tx *gethtypes.Transaction, from common.Address) (uint64, error) {
 	callMsg := ethereum.CallMsg{
 		From:  from,
 		To:    tx.To(),

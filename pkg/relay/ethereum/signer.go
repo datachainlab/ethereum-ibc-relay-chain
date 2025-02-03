@@ -16,6 +16,7 @@ type EthereumSigner struct {
 	gethSigner gethtypes.Signer
 	addressCache common.Address
 	logger *log.RelayLogger
+	NoSign bool
 }
 
 func NewEthereumSigner(bytesSigner signer.Signer, chainID *big.Int) (*EthereumSigner, error) {
@@ -38,6 +39,7 @@ func NewEthereumSigner(bytesSigner signer.Signer, chainID *big.Int) (*EthereumSi
 		gethSigner: gethSigner,
 		addressCache: addr,
 		logger: nil,
+		NoSign: false,
 	}, nil
 }
 
@@ -56,6 +58,10 @@ func (s *EthereumSigner) Address() common.Address {
 func (s *EthereumSigner) Sign(address common.Address, tx *gethtypes.Transaction) (*gethtypes.Transaction, error) {
 	if address != s.Address() {
 		return nil, fmt.Errorf("unauthorized address: authorized=%v, given=%v", s.Address(), address)
+	}
+
+	if s.NoSign {
+		return tx, nil
 	}
 
 	txHash := s.gethSigner.Hash(tx)
