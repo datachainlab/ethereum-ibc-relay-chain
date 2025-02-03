@@ -14,8 +14,9 @@ import (
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/rpc"
+	"github.com/datachainlab/ethereum-ibc-relay-chain/pkg/client/txpool"
 )
-
+/*
 // RPCTransaction represents a transaction that will serialize to the RPC representation of a transaction
 type RPCTransaction struct {
 	BlockHash           *common.Hash      `json:"blockHash"`
@@ -41,14 +42,14 @@ type RPCTransaction struct {
 	S                   *hexutil.Big      `json:"s"`
 	YParity             *hexutil.Uint64   `json:"yParity,omitempty"`
 }
-
+*/
 // wrapping interface of ethclient.Client struct
 type IETHClient interface {
 	Inner() *ethclient.Client
 	SuggestGasPrice(ctx context.Context) (*big.Int, error)
 	HeaderByNumber(ctx context.Context, number *big.Int) (*gethtypes.Header, error);
 	FeeHistory(ctx context.Context, blockCount uint64, lastBlock *big.Int, rewardPercentiles []float64) (*ethereum.FeeHistory, error)
-	ContentFrom(ctx context.Context, address common.Address) (map[string]map[string]*RPCTransaction, error);
+	GetMinimumRequiredFee(ctx context.Context, address common.Address, nonce uint64, priceBump uint64) (*txpool.RPCTransaction, *big.Int, *big.Int, error);
 }
 
 type ETHClient struct {
@@ -112,15 +113,6 @@ func (cl *ETHClient) HeaderByNumber(ctx context.Context, number *big.Int) (*geth
 }
 func (cl *ETHClient) FeeHistory(ctx context.Context, blockCount uint64, lastBlock *big.Int, rewardPercentiles []float64) (*ethereum.FeeHistory, error) {
 	return cl.Client.FeeHistory(ctx, blockCount, lastBlock, rewardPercentiles)
-}
-
-// ContentFrom calls `txpool_contentFrom` of the Ethereum RPC
-func (cl *ETHClient) ContentFrom(ctx context.Context, address common.Address) (map[string]map[string]*RPCTransaction, error) {
-	var res map[string]map[string]*RPCTransaction
-	if err := cl.Client.Client().CallContext(ctx, &res, "txpool_contentFrom", address); err != nil {
-		return nil, err
-	}
-	return res, nil
 }
 
 func (cl *ETHClient) GetTransactionReceipt(ctx context.Context, txHash common.Hash) (rc *Receipt, err error) {

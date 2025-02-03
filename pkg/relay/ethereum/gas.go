@@ -27,10 +27,10 @@ func NewGasFeeCalculator(client client.IETHClient, config *ChainConfig) *GasFeeC
 func (m *GasFeeCalculator) Apply(ctx context.Context, txOpts *bind.TransactOpts) error {
 	minFeeCap := common.Big0
 	minTipCap := common.Big0
-	var oldTx *client.RPCTransaction
+	var oldTx *txpool.RPCTransaction
 	if m.config.PriceBump > 0 && txOpts.Nonce != nil {
 		var err error
-		if oldTx, minFeeCap, minTipCap, err = txpool.GetMinimumRequiredFee(ctx, m.client, txOpts.From, txOpts.Nonce.Uint64(), m.config.PriceBump); err != nil {
+		if oldTx, minFeeCap, minTipCap, err = m.client.GetMinimumRequiredFee(ctx, txOpts.From, txOpts.Nonce.Uint64(), m.config.PriceBump); err != nil {
 			return err
 		}
 	}
