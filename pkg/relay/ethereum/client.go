@@ -69,5 +69,9 @@ func (cl *ChainClient) HeaderByNumber(ctx context.Context, number *big.Int) (*ge
 func (cl *ChainClient) FeeHistory(ctx context.Context, blockCount uint64, lastBlock *big.Int, rewardPercentiles []float64) (*ethereum.FeeHistory, error) {
 	return cl.ETHClient.Client.FeeHistory(ctx, blockCount, lastBlock, rewardPercentiles)
 }
+func (cl *ChainClient) GetMinimumRequiredFee(ctx context.Context, address common.Address, nonce uint64, priceBump uint64) (*txpool.RPCTransaction, *big.Int, *big.Int, error) {
+	return txpool.GetMinimumRequiredFee(ctx, cl.ETHClient.Client, address, nonce, priceBump);
+}
+
 
 
