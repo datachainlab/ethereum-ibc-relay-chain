@@ -43,7 +43,7 @@ type Chain struct {
 	codec            codec.ProtoCodecMarshaler
 	msgEventListener core.MsgEventListener
 
-	client     *client.ETHClient
+	client     *ChainClient // TODO: use IChainClient after defining all methods in the interface
 	ibcHandler *ibchandler.Ibchandler
 	multicall3 *multicall3.Multicall3
 
@@ -117,7 +117,7 @@ func NewChain(config ChainConfig) (*Chain, error) {
 
 	return &Chain{
 		config:  config,
-		client:  client,
+		client:  &ChainClient{ ETHClient: client },
 		chainID: id,
 
 		ibcHandler: ibcHandler,
@@ -192,7 +192,7 @@ func (c *Chain) Codec() codec.ProtoCodecMarshaler {
 
 // Client returns the RPC client for ethereum
 func (c *Chain) Client() *client.ETHClient {
-	return c.client
+	return c.client.ETHClient
 }
 
 // SetRelayInfo sets source's path and counterparty's info to the chain

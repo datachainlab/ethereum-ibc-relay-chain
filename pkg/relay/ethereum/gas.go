@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"math/big"
 
-	"github.com/datachainlab/ethereum-ibc-relay-chain/pkg/client"
 	"github.com/datachainlab/ethereum-ibc-relay-chain/pkg/client/txpool"
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
@@ -13,11 +12,11 @@ import (
 )
 
 type GasFeeCalculator struct {
-	client client.IETHClient
+	client IChainClient
 	config *ChainConfig
 }
 
-func NewGasFeeCalculator(client client.IETHClient, config *ChainConfig) *GasFeeCalculator {
+func NewGasFeeCalculator(client IChainClient, config *ChainConfig) *GasFeeCalculator {
 	return &GasFeeCalculator{
 		client: client,
 		config: config,

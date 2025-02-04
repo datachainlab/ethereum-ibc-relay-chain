@@ -21,7 +21,7 @@ func Test_TxOpts_LegacyTx(t *testing.T) {
 	}
 	config := createConfig()
 	config.TxType = "legacy"
-	calculator := NewGasFeeCalculator(ethClient, config)
+	calculator := NewGasFeeCalculator(&ChainClient{ ETHClient: ethClient }, config)
 	txOpts := &bind.TransactOpts{}
 	if err = calculator.Apply(context.Background(), txOpts); err != nil {
 		t.Fatal(err)
@@ -43,7 +43,7 @@ func Test_TxOpts_DynamicTx(t *testing.T) {
 		t.Fatal(err)
 	}
 	config := createConfig()
-	calculator := NewGasFeeCalculator(ethClient, config)
+	calculator := NewGasFeeCalculator(&ChainClient{ ETHClient: ethClient }, config)
 	txOpts := &bind.TransactOpts{}
 	if err = calculator.Apply(context.Background(), txOpts); err != nil {
 		t.Fatal(err)
@@ -66,7 +66,7 @@ func Test_TxOpts_AutoTx(t *testing.T) {
 	}
 	config := createConfig()
 	config.TxType = "auto"
-	calculator := NewGasFeeCalculator(ethClient, config)
+	calculator := NewGasFeeCalculator(&ChainClient{ ETHClient: ethClient }, config)
 	txOpts := &bind.TransactOpts{}
 	if err = calculator.Apply(context.Background(), txOpts); err != nil {
 		t.Fatal(err)
@@ -135,15 +135,15 @@ func Test_getFeeInfo(t *testing.T) {
 
 }
 
-type MockETHClient struct {
-	client.IETHClient
+type MockChainClient struct {
+	IChainClient
 	MockSuggestGasPrice big.Int
 	MockPendingTransaction *txpool.RPCTransaction
 	MockLatestHeaderNumber big.Int
 	MockHistoryGasTipCap big.Int
 	MockHistoryGasFeeCap big.Int
 }
-func (cl *MockETHClient) SuggestGasPrice(ctx context.Context) (*big.Int, error) {
+func (cl *MockChainClient) SuggestGasPrice(ctx context.Context) (*big.Int, error) {
 	return &cl.MockSuggestGasPrice, nil
 }
 
@@ -152,7 +152,7 @@ func inclByPercent(n *big.Int, percent uint64) {
 	n.Div(n, big.NewInt(100))
 }
 
-func (cl *MockETHClient) GetMinimumRequiredFee(ctx context.Context, address common.Address, nonce uint64, priceBump uint64) (*txpool.RPCTransaction, *big.Int, *big.Int, error) {
+func (cl *MockChainClient) GetMinimumRequiredFee(ctx context.Context, address common.Address, nonce uint64, priceBump uint64) (*txpool.RPCTransaction, *big.Int, *big.Int, error) {
 	gasFeeCap := new(big.Int).Set(cl.MockPendingTransaction.GasFeeCap.ToInt())
 	gasTipCap := new(big.Int).Set(cl.MockPendingTransaction.GasTipCap.ToInt())
 
@@ -162,7 +162,7 @@ func (cl *MockETHClient) GetMinimumRequiredFee(ctx context.Context, address comm
 	return cl.MockPendingTransaction, gasFeeCap, gasTipCap, nil
 }
 
-func (cl *MockETHClient) HeaderByNumber(ctx context.Context, number *big.Int) (*gethtypes.Header, error) {
+func (cl *MockChainClient) HeaderByNumber(ctx context.Context, number *big.Int) (*gethtypes.Header, error) {
 	if number != nil {
 		return &gethtypes.Header{
 			Number: big.NewInt(0).Set(number),
@@ -173,7 +173,7 @@ func (cl *MockETHClient) HeaderByNumber(ctx context.Context, number *big.Int) (*
 		}, nil
 	}
 }
-func (cl *MockETHClient) FeeHistory(ctx context.Context, blockCount uint64, lastBlock *big.Int, rewardPercentiles []float64) (*ethereum.FeeHistory, error) {
+func (cl *MockChainClient) FeeHistory(ctx context.Context, blockCount uint64, lastBlock *big.Int, rewardPercentiles []float64) (*ethereum.FeeHistory, error) {
 	return &ethereum.FeeHistory{
 		Reward: [][]*big.Int{ // gasTipCap
 			{ &cl.MockHistoryGasTipCap, },
@@ -185,7 +185,7 @@ func (cl *MockETHClient) FeeHistory(ctx context.Context, blockCount uint64, last
 }
 
 func TestPriceBumpLegacy(t *testing.T) {
-	cli := MockETHClient{}
+	cli := MockChainClient{}
 	config := createConfig()
 	config.TxType = TxTypeLegacy
 	config.PriceBump = 10
@@ -223,7 +223,7 @@ func TestPriceBumpLegacy(t *testing.T) {
 }
 
 func TestPriceBumpDynamic(t *testing.T) {
-	cli := MockETHClient{}
+	cli := MockChainClient{}
 	config := createConfig()
 	config.TxType = TxTypeDynamic
 	config.PriceBump = 100 //double
