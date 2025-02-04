@@ -6,7 +6,6 @@ import (
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
-	gethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 
 	"github.com/datachainlab/ethereum-ibc-relay-chain/pkg/client"
@@ -49,9 +48,10 @@ func (chain *Chain) TxOpts(ctx context.Context, useLatestNonce bool) (*bind.Tran
 
 // wrapping interface of client.ETHClient struct
 type IChainClient interface {
-	SuggestGasPrice(ctx context.Context) (*big.Int, error)
-	HeaderByNumber(ctx context.Context, number *big.Int) (*gethtypes.Header, error);
-	FeeHistory(ctx context.Context, blockCount uint64, lastBlock *big.Int, rewardPercentiles []float64) (*ethereum.FeeHistory, error)
+	ethereum.ChainReader
+	ethereum.GasPricer
+	ethereum.FeeHistoryReader
+
 	GetMinimumRequiredFee(ctx context.Context, address common.Address, nonce uint64, priceBump uint64) (*txpool.RPCTransaction, *big.Int, *big.Int, error);
 }
 
@@ -59,19 +59,6 @@ type ChainClient struct {
 	*client.ETHClient
 }
 
-// implements IETHChainClient
-func (cl *ChainClient) SuggestGasPrice(ctx context.Context) (*big.Int, error) {
-	return cl.ETHClient.Client.SuggestGasPrice(ctx)
-}
-func (cl *ChainClient) HeaderByNumber(ctx context.Context, number *big.Int) (*gethtypes.Header, error) {
-	return cl.ETHClient.Client.HeaderByNumber(ctx, number)
-}
-func (cl *ChainClient) FeeHistory(ctx context.Context, blockCount uint64, lastBlock *big.Int, rewardPercentiles []float64) (*ethereum.FeeHistory, error) {
-	return cl.ETHClient.Client.FeeHistory(ctx, blockCount, lastBlock, rewardPercentiles)
-}
 func (cl *ChainClient) GetMinimumRequiredFee(ctx context.Context, address common.Address, nonce uint64, priceBump uint64) (*txpool.RPCTransaction, *big.Int, *big.Int, error) {
 	return txpool.GetMinimumRequiredFee(ctx, cl.ETHClient.Client, address, nonce, priceBump);
 }
-
-
-
