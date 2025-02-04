@@ -76,8 +76,10 @@ func transfer(t *testing.T, ctx context.Context, client *ethclient.Client, signe
 func replace(t *testing.T, ctx context.Context, client *ethclient.Client, signer types.Signer, key *ecdsa.PrivateKey, priceBump uint64, nonce uint64, gasTipCap, gasFeeCap *big.Int, to common.Address, amount *big.Int) {
 	addr := crypto.PubkeyToAddress(key.PublicKey)
 
-	if _, minFeeCap, minTipCap, err := GetMinimumRequiredFee(ctx, client, addr, nonce, priceBump); err != nil {
+	if tx, minFeeCap, minTipCap, err := GetMinimumRequiredFee(ctx, client, addr, nonce, priceBump); err != nil {
 		t.Fatalf("failed to get the minimum fee required to replace tx: err=%v", err)
+	} else if tx == nil {
+		t.Fatalf("replacing tx is not found")
 	} else if minFeeCap.Cmp(common.Big0) == 0 {
 		t.Fatalf("tx to replace not found")
 	} else {
