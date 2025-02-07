@@ -54,21 +54,24 @@ func (m *GasFeeCalculator) Apply(ctx context.Context, txOpts *bind.TransactOpts)
 		}
 		// GasTipCap = min(LimitPriorityFeePerGas, simulated_eth_maxPriorityFeePerGas * PriorityFeeRate)
 		m.config.DynamicTxGasConfig.PriorityFeeRate.Mul(gasTipCap)
-		if oldTx != nil && oldTx.GasTipCap != nil && oldTx.GasTipCap.ToInt().Cmp(gasTipCap) > 0 {
-			return fmt.Errorf("old tx's gasTipCap(%v) is higher than suggestion(%v)", oldTx.GasTipCap.ToInt(), gasTipCap)
+
+		// GasFeeCap = min(LimitFeePerGas, GasTipCap + BaseFee * BaseFeeRate)
+		m.config.DynamicTxGasConfig.BaseFeeRate.Mul(gasFeeCap)
+		gasFeeCap.Add(gasFeeCap, gasTipCap)
+
+		if oldTx != nil && oldTx.GasFeeCap != nil && oldTx.GasTipCap != nil {
+			if oldTx.GasFeeCap.ToInt().Cmp(gasFeeCap) > 0 && oldTx.GasTipCap.ToInt().Cmp(gasTipCap) > 0 {
+				return fmt.Errorf("old tx's gasFeeCap(%v) and gasTipCap(%v) are higher than suggestion(%v, %v)", oldTx.GasFeeCap.ToInt(), oldTx.GasTipCap.ToInt(), gasFeeCap, gasTipCap)
+			}
 		}
+
 		if gasTipCap.Cmp(minTipCap) < 0 {
 			gasTipCap = minTipCap
 		}
 		if l := m.config.DynamicTxGasConfig.GetLimitPriorityFeePerGas(); l.Sign() > 0 && gasTipCap.Cmp(l) > 0 {
 			gasTipCap = l
 		}
-		// GasFeeCap = min(LimitFeePerGas, GasTipCap + BaseFee * BaseFeeRate)
-		m.config.DynamicTxGasConfig.BaseFeeRate.Mul(gasFeeCap)
-		gasFeeCap.Add(gasFeeCap, gasTipCap)
-		if oldTx != nil && oldTx.GasFeeCap != nil && oldTx.GasFeeCap.ToInt().Cmp(gasFeeCap) > 0 {
-			return fmt.Errorf("old tx's gasFeeCap(%v) is higher than suggestion(%v)", oldTx.GasFeeCap.ToInt(), gasFeeCap)
-		}
+
 		if gasFeeCap.Cmp(minFeeCap) < 0 {
 			gasFeeCap = minFeeCap
 		}

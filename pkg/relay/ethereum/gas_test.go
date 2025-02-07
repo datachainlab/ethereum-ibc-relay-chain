@@ -267,25 +267,37 @@ func TestPriceBumpDynamic(t *testing.T) {
 		}
 	}
 
-	// test that old tx's gasTipCap is already exceeds suggestion
+	// test that old only tx's gasTipCap exceeds suggestion
 	{
-		cli.MockHistoryGasTipCap.SetUint64(199)
+		cli.MockHistoryGasTipCap.SetUint64(199) // lower than old tx's tipCap(=200)
 		err := calculator.Apply(context.Background(), txOpts)
-		if err == nil || err.Error() != "old tx's gasTipCap(200) is higher than suggestion(199)" {
+		if err != nil {
 			t.Fatal(err)
 		}
 	}
 
-	// test that old tx's gasFeeCap is already exceeds suggestion
+	// test that old only tx's gasFeeCap exceeds suggestion
 	{
 		// Because gasTipCap suggestion is added to gasFeeCap suggenstion,
 		// gasTipCap suggestion should be lower than old tx's gasFeeCap
 		cli.MockPendingTransaction.GasTipCap = (*hexutil.Big)(big.NewInt(100))
 		cli.MockPendingTransaction.GasFeeCap = (*hexutil.Big)(big.NewInt(300))
-		cli.MockHistoryGasTipCap.SetUint64(199)
-		cli.MockHistoryGasFeeCap.SetUint64(299 - 200)
+		cli.MockHistoryGasTipCap.SetUint64(199) // between old tx's tipCap(=100) and bump(=200)
+		cli.MockHistoryGasFeeCap.SetUint64(299 - 199) // lower than old tx's feeCap(=300)
 		err := calculator.Apply(context.Background(), txOpts)
-		if err == nil || err.Error() != "old tx's gasFeeCap(300) is higher than suggestion(299)" {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// test that old both tx's gasFeeCap and gasTipCap exceed suggestion
+	{
+		cli.MockPendingTransaction.GasTipCap = (*hexutil.Big)(big.NewInt(100))
+		cli.MockPendingTransaction.GasFeeCap = (*hexutil.Big)(big.NewInt(300))
+		cli.MockHistoryGasTipCap.SetUint64(99) // lower than 100
+		cli.MockHistoryGasFeeCap.SetUint64(299 - 99) //lower than 300
+		err := calculator.Apply(context.Background(), txOpts)
+		if err == nil || err.Error() != "old tx's gasFeeCap(300) and gasTipCap(100) are higher than suggestion(299, 99)" {
 			t.Fatal(err)
 		}
 	}
