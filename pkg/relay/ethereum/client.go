@@ -4,7 +4,12 @@ import (
 	"context"
 	"math/big"
 
+	"github.com/ethereum/go-ethereum"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
+
+	"github.com/datachainlab/ethereum-ibc-relay-chain/pkg/client"
+	"github.com/datachainlab/ethereum-ibc-relay-chain/pkg/client/txpool"
 )
 
 func (chain *Chain) CallOpts(ctx context.Context, height int64) *bind.CallOpts {
@@ -26,10 +31,6 @@ func (chain *Chain) TxOpts(ctx context.Context, useLatestNonce bool) (*bind.Tran
 		Signer: chain.ethereumSigner.Sign,
 	}
 
-	if err := NewGasFeeCalculator(chain.client, &chain.config).Apply(ctx, txOpts); err != nil {
-		return nil, err
-	}
-
 	if useLatestNonce {
 		if nonce, err := chain.client.NonceAt(ctx, addr, nil); err != nil {
 			return nil, err
@@ -38,5 +39,26 @@ func (chain *Chain) TxOpts(ctx context.Context, useLatestNonce bool) (*bind.Tran
 		}
 	}
 
+	if err := NewGasFeeCalculator(chain.client, &chain.config).Apply(ctx, txOpts); err != nil {
+		return nil, err
+	}
+
 	return txOpts, nil
+}
+
+// wrapping interface of client.ETHClient struct
+type IChainClient interface {
+	ethereum.ChainReader
+	ethereum.GasPricer
+	ethereum.FeeHistoryReader
+
+	GetMinimumRequiredFee(ctx context.Context, address common.Address, nonce uint64, priceBump uint64) (*txpool.RPCTransaction, *big.Int, *big.Int, error);
+}
+
+type ChainClient struct {
+	*client.ETHClient
+}
+
+func (cl *ChainClient) GetMinimumRequiredFee(ctx context.Context, address common.Address, nonce uint64, priceBump uint64) (*txpool.RPCTransaction, *big.Int, *big.Int, error) {
+	return txpool.GetMinimumRequiredFee(ctx, cl.ETHClient.Client, address, nonce, priceBump);
 }

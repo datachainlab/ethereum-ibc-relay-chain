@@ -47,12 +47,16 @@ func NewETHClient(endpoint string, opts ...Option) (*ETHClient, error) {
 	if err != nil {
 		return nil, err
 	}
+	return NewETHClientWith(ethclient.NewClient(rpcClient), opts...)
+}
+
+func NewETHClientWith(cli *ethclient.Client, opts ...Option) (*ETHClient, error) {
 	opt := DefaultOption()
 	for _, o := range opts {
 		o(opt)
 	}
 	return &ETHClient{
-		Client: ethclient.NewClient(rpcClient),
+		Client: cli,
 		option: *opt,
 	}, nil
 }

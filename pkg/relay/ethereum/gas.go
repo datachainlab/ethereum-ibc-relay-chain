@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"math/big"
 
-	"github.com/datachainlab/ethereum-ibc-relay-chain/pkg/client"
 	"github.com/datachainlab/ethereum-ibc-relay-chain/pkg/client/txpool"
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
@@ -13,11 +12,11 @@ import (
 )
 
 type GasFeeCalculator struct {
-	client *client.ETHClient
+	client IChainClient
 	config *ChainConfig
 }
 
-func NewGasFeeCalculator(client *client.ETHClient, config *ChainConfig) *GasFeeCalculator {
+func NewGasFeeCalculator(client IChainClient, config *ChainConfig) *GasFeeCalculator {
 	return &GasFeeCalculator{
 		client: client,
 		config: config,
@@ -27,18 +26,21 @@ func NewGasFeeCalculator(client *client.ETHClient, config *ChainConfig) *GasFeeC
 func (m *GasFeeCalculator) Apply(ctx context.Context, txOpts *bind.TransactOpts) error {
 	minFeeCap := common.Big0
 	minTipCap := common.Big0
+	var oldTx *txpool.RPCTransaction
 	if m.config.PriceBump > 0 && txOpts.Nonce != nil {
 		var err error
-		if minFeeCap, minTipCap, err = txpool.GetMinimumRequiredFee(ctx, m.client.Client, txOpts.From, txOpts.Nonce.Uint64(), m.config.PriceBump); err != nil {
+		if oldTx, minFeeCap, minTipCap, err = m.client.GetMinimumRequiredFee(ctx, txOpts.From, txOpts.Nonce.Uint64(), m.config.PriceBump); err != nil {
 			return err
 		}
 	}
-
 	switch m.config.TxType {
 	case TxTypeLegacy:
 		gasPrice, err := m.client.SuggestGasPrice(ctx)
 		if err != nil {
 			return fmt.Errorf("failed to suggest gas price: %v", err)
+		}
+		if oldTx != nil && oldTx.GasPrice != nil && oldTx.GasPrice.ToInt().Cmp(gasPrice) > 0 {
+			return fmt.Errorf("old tx's gasPrice(%v) is higher than suggestion(%v)", oldTx.GasPrice.ToInt(), gasPrice)
 		}
 		if gasPrice.Cmp(minFeeCap) < 0 {
 			gasPrice = minFeeCap
@@ -52,15 +54,24 @@ func (m *GasFeeCalculator) Apply(ctx context.Context, txOpts *bind.TransactOpts)
 		}
 		// GasTipCap = min(LimitPriorityFeePerGas, simulated_eth_maxPriorityFeePerGas * PriorityFeeRate)
 		m.config.DynamicTxGasConfig.PriorityFeeRate.Mul(gasTipCap)
+
+		// GasFeeCap = min(LimitFeePerGas, GasTipCap + BaseFee * BaseFeeRate)
+		m.config.DynamicTxGasConfig.BaseFeeRate.Mul(gasFeeCap)
+		gasFeeCap.Add(gasFeeCap, gasTipCap)
+
+		if oldTx != nil && oldTx.GasFeeCap != nil && oldTx.GasTipCap != nil {
+			if oldTx.GasFeeCap.ToInt().Cmp(gasFeeCap) >= 0 && oldTx.GasTipCap.ToInt().Cmp(gasTipCap) >= 0 {
+				return fmt.Errorf("old tx's gasFeeCap(%v) and gasTipCap(%v) are greater than or equal to suggestion(%v, %v)", oldTx.GasFeeCap.ToInt(), oldTx.GasTipCap.ToInt(), gasFeeCap, gasTipCap)
+			}
+		}
+
 		if gasTipCap.Cmp(minTipCap) < 0 {
 			gasTipCap = minTipCap
 		}
 		if l := m.config.DynamicTxGasConfig.GetLimitPriorityFeePerGas(); l.Sign() > 0 && gasTipCap.Cmp(l) > 0 {
 			gasTipCap = l
 		}
-		// GasFeeCap = min(LimitFeePerGas, GasTipCap + BaseFee * BaseFeeRate)
-		m.config.DynamicTxGasConfig.BaseFeeRate.Mul(gasFeeCap)
-		gasFeeCap.Add(gasFeeCap, gasTipCap)
+
 		if gasFeeCap.Cmp(minFeeCap) < 0 {
 			gasFeeCap = minFeeCap
 		}
