@@ -294,10 +294,10 @@ func TestPriceBumpDynamic(t *testing.T) {
 	{
 		cli.MockPendingTransaction.GasTipCap = (*hexutil.Big)(big.NewInt(100))
 		cli.MockPendingTransaction.GasFeeCap = (*hexutil.Big)(big.NewInt(300))
-		cli.MockHistoryGasTipCap.SetUint64(99) // lower than 100
-		cli.MockHistoryGasFeeCap.SetUint64(299 - 99) //lower than 300
+		cli.MockHistoryGasTipCap.SetUint64(100) // eq to 100
+		cli.MockHistoryGasFeeCap.SetUint64(300 - 100) // eq to 300
 		err := calculator.Apply(context.Background(), txOpts)
-		if err == nil || err.Error() != "old tx's gasFeeCap(300) and gasTipCap(100) are higher than suggestion(299, 99)" {
+		if err == nil || err.Error() != "old tx's gasFeeCap(300) and gasTipCap(100) are greater than or equal to suggestion(300, 100)" {
 			t.Fatal(err)
 		}
 	}

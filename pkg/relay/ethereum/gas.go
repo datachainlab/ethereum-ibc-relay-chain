@@ -61,7 +61,7 @@ func (m *GasFeeCalculator) Apply(ctx context.Context, txOpts *bind.TransactOpts)
 
 		if oldTx != nil && oldTx.GasFeeCap != nil && oldTx.GasTipCap != nil {
 			if oldTx.GasFeeCap.ToInt().Cmp(gasFeeCap) >= 0 && oldTx.GasTipCap.ToInt().Cmp(gasTipCap) >= 0 {
-				return fmt.Errorf("old tx's gasFeeCap(%v) and gasTipCap(%v) are higher than suggestion(%v, %v)", oldTx.GasFeeCap.ToInt(), oldTx.GasTipCap.ToInt(), gasFeeCap, gasTipCap)
+				return fmt.Errorf("old tx's gasFeeCap(%v) and gasTipCap(%v) are greater than or equal to suggestion(%v, %v)", oldTx.GasFeeCap.ToInt(), oldTx.GasTipCap.ToInt(), gasFeeCap, gasTipCap)
 			}
 		}
 
