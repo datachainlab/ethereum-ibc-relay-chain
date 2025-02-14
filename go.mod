@@ -233,3 +233,6 @@ require (
 	rsc.io/tmplfunc v0.0.3 // indirect
 	sigs.k8s.io/yaml v1.4.0 // indirect
 )
+
+// TODO: Delete the following line before making the PR ready for review
+replace github.com/hyperledger-labs/yui-relayer => github.com/abicky/yui-relayer v0.0.0-20250210124308-708cf668078d
