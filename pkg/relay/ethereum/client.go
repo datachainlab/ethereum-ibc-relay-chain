@@ -5,8 +5,8 @@ import (
 	"math/big"
 
 	"github.com/ethereum/go-ethereum"
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
+	"github.com/ethereum/go-ethereum/common"
 
 	"github.com/datachainlab/ethereum-ibc-relay-chain/pkg/client"
 	"github.com/datachainlab/ethereum-ibc-relay-chain/pkg/client/txpool"
@@ -52,7 +52,7 @@ type IChainClient interface {
 	ethereum.GasPricer
 	ethereum.FeeHistoryReader
 
-	GetMinimumRequiredFee(ctx context.Context, address common.Address, nonce uint64, priceBump uint64) (*txpool.RPCTransaction, *big.Int, *big.Int, error);
+	GetMinimumRequiredFee(ctx context.Context, address common.Address, nonce uint64, priceBump uint64) (*txpool.RPCTransaction, *big.Int, *big.Int, error)
 }
 
 type ChainClient struct {
@@ -60,5 +60,5 @@ type ChainClient struct {
 }
 
 func (cl *ChainClient) GetMinimumRequiredFee(ctx context.Context, address common.Address, nonce uint64, priceBump uint64) (*txpool.RPCTransaction, *big.Int, *big.Int, error) {
-	return txpool.GetMinimumRequiredFee(ctx, cl.ETHClient.Client, address, nonce, priceBump);
+	return txpool.GetMinimumRequiredFee(ctx, cl.ETHClient.Client, address, nonce, priceBump)
 }

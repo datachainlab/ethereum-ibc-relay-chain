@@ -1,51 +1,51 @@
 package ethereum
 
 import (
-	"testing"
 	"fmt"
 	"slices"
+	"testing"
 )
 
 func TestFindItems(t *testing.T) {
-	cases := []struct{
-		size int
-		expect int
+	cases := []struct {
+		size      int
+		expect    int
 		expectLog []int
 	}{
 		{
-			size: 0,
-			expect: 0,
-			expectLog: []int{ },
+			size:      0,
+			expect:    0,
+			expectLog: []int{},
 		},
 		{
-			size: 10,
-			expect: 10,
-			expectLog: []int{ 10 },
+			size:      10,
+			expect:    10,
+			expectLog: []int{10},
 		},
 		{
-			size: 10,
-			expect: 9,
-			expectLog: []int{ 10, 5, 8, 9 },
+			size:      10,
+			expect:    9,
+			expectLog: []int{10, 5, 8, 9},
 		},
 		{
-			size: 10,
-			expect: 0,
-			expectLog: []int{ 10, 5, 3, 2, 1 },
+			size:      10,
+			expect:    0,
+			expectLog: []int{10, 5, 3, 2, 1},
 		},
 		{
-			size: 10,
-			expect: 2,
-			expectLog: []int{ 10, 5, 3, 2 },
+			size:      10,
+			expect:    2,
+			expectLog: []int{10, 5, 3, 2},
 		},
 	}
 
 	for _, c := range cases {
-		type Data struct{
+		type Data struct {
 			expect int
-			log []int
+			log    []int
 		}
-		data := Data{ expect: c.expect, log: make([]int, 0, c.size) }
-		result, err := findItems(c.size, func(count int) (error) {
+		data := Data{expect: c.expect, log: make([]int, 0, c.size)}
+		result, err := findItems(c.size, func(count int) error {
 			data.log = append(data.log, count)
 			if count <= data.expect {
 				return nil
@@ -67,4 +67,3 @@ func TestFindItems(t *testing.T) {
 		}
 	}
 }
-
