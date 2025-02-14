@@ -156,7 +156,7 @@ func (c *Chain) ChainID() string {
 }
 
 // GetLatestHeight gets the chain for the latest height and returns it
-func (c *Chain) LatestHeight() (ibcexported.Height, error) {
+func (c *Chain) LatestHeight(ctx context.Context) (ibcexported.Height, error) {
 	logger := c.GetChainLogger()
 	bn, err := c.client.BlockNumber(context.TODO())
 	if err != nil {
@@ -166,7 +166,7 @@ func (c *Chain) LatestHeight() (ibcexported.Height, error) {
 	return clienttypes.NewHeight(0, bn), nil
 }
 
-func (c *Chain) Timestamp(height ibcexported.Height) (time.Time, error) {
+func (c *Chain) Timestamp(ctx context.Context, height ibcexported.Height) (time.Time, error) {
 	ht := big.NewInt(int64(height.GetRevisionHeight()))
 	if header, err := c.client.HeaderByNumber(context.TODO(), ht); err != nil {
 		return time.Time{}, err
@@ -394,7 +394,7 @@ func (c *Chain) QueryUnfinalizedRelayPackets(ctx core.QueryContext, counterparty
 		return nil, err
 	}
 
-	counterpartyHeader, err := counterparty.GetLatestFinalizedHeader()
+	counterpartyHeader, err := counterparty.GetLatestFinalizedHeader(context.TODO())
 	if err != nil {
 		logger.Error("failed to get latest finalized header", err)
 		return nil, err
@@ -458,7 +458,7 @@ func (c *Chain) QueryUnfinalizedRelayAcknowledgements(ctx core.QueryContext, cou
 		return nil, err
 	}
 
-	counterpartyHeader, err := counterparty.GetLatestFinalizedHeader()
+	counterpartyHeader, err := counterparty.GetLatestFinalizedHeader(context.TODO())
 	if err != nil {
 		logger.Error("failed to get latest finalized header", err)
 		return nil, err
@@ -550,7 +550,7 @@ func (c *Chain) confirmConnectionOpened(ctx context.Context) (bool, error) {
 	if c.pathEnd.ConnectionID == "" {
 		return false, nil
 	}
-	latestHeight, err := c.LatestHeight()
+	latestHeight, err := c.LatestHeight(context.TODO())
 	if err != nil {
 		return false, err
 	}

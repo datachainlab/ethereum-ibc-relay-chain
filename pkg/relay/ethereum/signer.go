@@ -1,6 +1,7 @@
 package ethereum
 
 import (
+	"context"
 	"fmt"
 	"math/big"
 
@@ -20,7 +21,7 @@ type EthereumSigner struct {
 }
 
 func NewEthereumSigner(bytesSigner signer.Signer, chainID *big.Int) (*EthereumSigner, error) {
-	pkbytes, err := bytesSigner.GetPublicKey()
+	pkbytes, err := bytesSigner.GetPublicKey(context.TODO())
 	if err != nil {
 		return nil, fmt.Errorf("fail to get public key")
 	}
@@ -70,7 +71,7 @@ func (s *EthereumSigner) Sign(address common.Address, tx *gethtypes.Transaction)
 		s.logger.Info("try to sign", "address", address, "txHash", txHash.Hex())
 	}
 
-	sig, err := s.bytesSigner.Sign(txHash.Bytes())
+	sig, err := s.bytesSigner.Sign(context.TODO(), txHash.Bytes())
 	if err != nil {
 		return nil, fmt.Errorf("failed to sign tx: %v", err)
 	}
