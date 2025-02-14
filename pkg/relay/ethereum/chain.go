@@ -111,13 +111,13 @@ func NewChain(config ChainConfig) (*Chain, error) {
 	}
 	txMaxSize := config.GetTxMaxSize()
 	if txMaxSize == 0 {
-		txMaxSize = 128 * 1024  // go-ethereum/core/txpool/legacypool/legacypool.go
-		logger.Info(fmt.Sprintf("txMaxSize is zero. set to %v", txMaxSize));
+		txMaxSize = 128 * 1024 // go-ethereum/core/txpool/legacypool/legacypool.go
+		logger.Info(fmt.Sprintf("txMaxSize is zero. set to %v", txMaxSize))
 	}
 
 	return &Chain{
 		config:  config,
-		client:  &ChainClient{ ETHClient: client },
+		client:  &ChainClient{ETHClient: client},
 		chainID: id,
 
 		ibcHandler: ibcHandler,

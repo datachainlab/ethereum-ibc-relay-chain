@@ -4,19 +4,19 @@ import (
 	"fmt"
 	"math/big"
 
+	"github.com/ethereum/go-ethereum/common"
+	gethtypes "github.com/ethereum/go-ethereum/core/types"
+	gethcrypto "github.com/ethereum/go-ethereum/crypto"
 	"github.com/hyperledger-labs/yui-relayer/log"
 	"github.com/hyperledger-labs/yui-relayer/signer"
-	"github.com/ethereum/go-ethereum/common"
-	gethcrypto "github.com/ethereum/go-ethereum/crypto"
-	gethtypes "github.com/ethereum/go-ethereum/core/types"
 )
 
 type EthereumSigner struct {
-	bytesSigner signer.Signer
-	gethSigner gethtypes.Signer
+	bytesSigner  signer.Signer
+	gethSigner   gethtypes.Signer
 	addressCache common.Address
-	logger *log.RelayLogger
-	NoSign bool
+	logger       *log.RelayLogger
+	NoSign       bool
 }
 
 func NewEthereumSigner(bytesSigner signer.Signer, chainID *big.Int) (*EthereumSigner, error) {
@@ -34,16 +34,16 @@ func NewEthereumSigner(bytesSigner signer.Signer, chainID *big.Int) (*EthereumSi
 
 	gethSigner := gethtypes.LatestSignerForChainID(chainID)
 
-	return &EthereumSigner {
-		bytesSigner: bytesSigner,
-		gethSigner: gethSigner,
+	return &EthereumSigner{
+		bytesSigner:  bytesSigner,
+		gethSigner:   gethSigner,
 		addressCache: addr,
-		logger: nil,
-		NoSign: false,
+		logger:       nil,
+		NoSign:       false,
 	}, nil
 }
 
-func (s *EthereumSigner) GetLogger() (*log.RelayLogger) {
+func (s *EthereumSigner) GetLogger() *log.RelayLogger {
 	return s.logger
 }
 
@@ -66,8 +66,8 @@ func (s *EthereumSigner) Sign(address common.Address, tx *gethtypes.Transaction)
 
 	txHash := s.gethSigner.Hash(tx)
 
-	if (s.logger != nil) {
-		s.logger.Info("try to sign", "address", address, "txHash", txHash.Hex());
+	if s.logger != nil {
+		s.logger.Info("try to sign", "address", address, "txHash", txHash.Hex())
 	}
 
 	sig, err := s.bytesSigner.Sign(txHash.Bytes())
