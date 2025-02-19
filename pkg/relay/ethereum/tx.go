@@ -30,9 +30,7 @@ import (
 )
 
 // SendMsgs sends msgs to the chain
-func (c *Chain) SendMsgs(msgs []sdk.Msg) ([]core.MsgID, error) {
-	ctx := context.TODO()
-
+func (c *Chain) SendMsgs(ctx context.Context, msgs []sdk.Msg) ([]core.MsgID, error) {
 	// if src's connection is OPEN, dst's connection is OPEN or TRYOPEN, so we can skip to update client commitments
 	skipUpdateClientCommitment, err := c.confirmConnectionOpened(ctx)
 	if err != nil {
@@ -111,7 +109,7 @@ func (c *Chain) SendMsgs(msgs []sdk.Msg) ([]core.MsgID, error) {
 		logger.Info("successfully sent tx")
 		if c.msgEventListener != nil {
 			for i := from; i < iter.Cursor(); i++ {
-				if err := c.msgEventListener.OnSentMsg([]sdk.Msg{msgs[i]}); err != nil {
+				if err := c.msgEventListener.OnSentMsg(context.TODO(), []sdk.Msg{msgs[i]}); err != nil {
 					logger.Error("failed to OnSendMsg call", err, "index", i)
 				}
 			}
@@ -124,14 +122,13 @@ func (c *Chain) SendMsgs(msgs []sdk.Msg) ([]core.MsgID, error) {
 	return msgIDs, nil
 }
 
-func (c *Chain) GetMsgResult(id core.MsgID) (core.MsgResult, error) {
+func (c *Chain) GetMsgResult(ctx context.Context, id core.MsgID) (core.MsgResult, error) {
 	logger := c.GetChainLogger()
 
 	msgID, ok := id.(*MsgID)
 	if !ok {
 		return nil, fmt.Errorf("unexpected message id type: %T", id)
 	}
-	ctx := context.TODO()
 	txHash := msgID.TxHash()
 	receipt, err := c.client.WaitForReceiptAndGet(ctx, txHash)
 	if err != nil {
