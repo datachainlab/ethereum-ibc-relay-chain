@@ -27,8 +27,9 @@ func (chain *Chain) TxOpts(ctx context.Context, useLatestNonce bool) (*bind.Tran
 	addr := chain.ethereumSigner.Address()
 
 	txOpts := &bind.TransactOpts{
-		From:   addr,
-		Signer: chain.ethereumSigner.Sign,
+		From:    addr,
+		Signer:  chain.ethereumSigner.Sign,
+		Context: ctx,
 	}
 
 	if useLatestNonce {

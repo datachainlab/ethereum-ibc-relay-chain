@@ -158,7 +158,7 @@ func (c *Chain) ChainID() string {
 // GetLatestHeight gets the chain for the latest height and returns it
 func (c *Chain) LatestHeight(ctx context.Context) (ibcexported.Height, error) {
 	logger := c.GetChainLogger()
-	bn, err := c.client.BlockNumber(context.TODO())
+	bn, err := c.client.BlockNumber(ctx)
 	if err != nil {
 		logger.Error("failed to get block number", err)
 		return nil, err
@@ -168,7 +168,7 @@ func (c *Chain) LatestHeight(ctx context.Context) (ibcexported.Height, error) {
 
 func (c *Chain) Timestamp(ctx context.Context, height ibcexported.Height) (time.Time, error) {
 	ht := big.NewInt(int64(height.GetRevisionHeight()))
-	if header, err := c.client.HeaderByNumber(context.TODO(), ht); err != nil {
+	if header, err := c.client.HeaderByNumber(ctx, ht); err != nil {
 		return time.Time{}, err
 	} else {
 		return time.Unix(int64(header.Time), 0), nil
@@ -375,7 +375,7 @@ func (c *Chain) QueryUnreceivedPackets(ctx core.QueryContext, seqs []uint64) ([]
 	return ret, nil
 }
 
-// QueryUnfinalizedRelayedPackets returns packets and heights that are sent but not received at the latest finalized block on the counterparty chain
+// QueryUnfinalizedRelayPackets returns packets and heights that are sent but not received at the latest finalized block on the counterparty chain
 func (c *Chain) QueryUnfinalizedRelayPackets(ctx core.QueryContext, counterparty core.LightClientICS04Querier) (core.PacketInfoList, error) {
 	logger := c.GetChannelLogger()
 	checkpoint, err := c.loadCheckpoint(sendCheckpoint)
@@ -394,13 +394,13 @@ func (c *Chain) QueryUnfinalizedRelayPackets(ctx core.QueryContext, counterparty
 		return nil, err
 	}
 
-	counterpartyHeader, err := counterparty.GetLatestFinalizedHeader(context.TODO())
+	counterpartyHeader, err := counterparty.GetLatestFinalizedHeader(ctx.Context())
 	if err != nil {
 		logger.Error("failed to get latest finalized header", err)
 		return nil, err
 	}
 
-	counterpartyCtx := core.NewQueryContext(context.TODO(), counterpartyHeader.GetHeight())
+	counterpartyCtx := core.NewQueryContext(ctx.Context(), counterpartyHeader.GetHeight())
 	seqs, err := counterparty.QueryUnreceivedPackets(counterpartyCtx, packets.ExtractSequenceList())
 	if err != nil {
 		logger.Error("failed to query unreceived packets", err)
@@ -439,7 +439,7 @@ func (c *Chain) QueryUnreceivedAcknowledgements(ctx core.QueryContext, seqs []ui
 	return ret, nil
 }
 
-// QueryUnfinalizedRelayedAcknowledgements returns acks and heights that are sent but not received at the latest finalized block on the counterpartychain
+// QueryUnfinalizedRelayAcknowledgements returns acks and heights that are sent but not received at the latest finalized block on the counterpartychain
 func (c *Chain) QueryUnfinalizedRelayAcknowledgements(ctx core.QueryContext, counterparty core.LightClientICS04Querier) (core.PacketInfoList, error) {
 	logger := c.GetChannelLogger()
 	checkpoint, err := c.loadCheckpoint(recvCheckpoint)
@@ -458,13 +458,13 @@ func (c *Chain) QueryUnfinalizedRelayAcknowledgements(ctx core.QueryContext, cou
 		return nil, err
 	}
 
-	counterpartyHeader, err := counterparty.GetLatestFinalizedHeader(context.TODO())
+	counterpartyHeader, err := counterparty.GetLatestFinalizedHeader(ctx.Context())
 	if err != nil {
 		logger.Error("failed to get latest finalized header", err)
 		return nil, err
 	}
 
-	counterpartyCtx := core.NewQueryContext(context.TODO(), counterpartyHeader.GetHeight())
+	counterpartyCtx := core.NewQueryContext(ctx.Context(), counterpartyHeader.GetHeight())
 	seqs, err := counterparty.QueryUnreceivedAcknowledgements(counterpartyCtx, packets.ExtractSequenceList())
 	if err != nil {
 		logger.Error("failed to query unreceived acknowledgements", err)
@@ -550,7 +550,7 @@ func (c *Chain) confirmConnectionOpened(ctx context.Context) (bool, error) {
 	if c.pathEnd.ConnectionID == "" {
 		return false, nil
 	}
-	latestHeight, err := c.LatestHeight(context.TODO())
+	latestHeight, err := c.LatestHeight(ctx)
 	if err != nil {
 		return false, err
 	}
