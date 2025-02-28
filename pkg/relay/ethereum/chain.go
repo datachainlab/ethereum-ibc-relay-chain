@@ -60,7 +60,7 @@ type Chain struct {
 
 var _ core.Chain = (*Chain)(nil)
 
-func NewChain(config ChainConfig) (*Chain, error) {
+func NewChain(ctx context.Context, config ChainConfig) (*Chain, error) {
 	logger := GetModuleLogger()
 
 	id := big.NewInt(int64(config.EthChainId))
@@ -93,7 +93,7 @@ func NewChain(config ChainConfig) (*Chain, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to build signer: %v", err)
 	}
-	ethereumSigner, err := NewEthereumSigner(signer, big.NewInt(int64(config.EthChainId)))
+	ethereumSigner, err := NewEthereumSigner(ctx, signer, big.NewInt(int64(config.EthChainId)))
 	if err != nil {
 		return nil, fmt.Errorf("failed to build ethreum signer: %v", err)
 	}

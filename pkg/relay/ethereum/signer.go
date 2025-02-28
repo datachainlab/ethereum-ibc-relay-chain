@@ -20,8 +20,8 @@ type EthereumSigner struct {
 	NoSign       bool
 }
 
-func NewEthereumSigner(bytesSigner signer.Signer, chainID *big.Int) (*EthereumSigner, error) {
-	pkbytes, err := bytesSigner.GetPublicKey(context.TODO())
+func NewEthereumSigner(ctx context.Context, bytesSigner signer.Signer, chainID *big.Int) (*EthereumSigner, error) {
+	pkbytes, err := bytesSigner.GetPublicKey(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("fail to get public key")
 	}
