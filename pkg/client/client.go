@@ -88,7 +88,7 @@ func (cl *ETHClient) WaitForReceiptAndGet(ctx context.Context, txHash common.Has
 			receipt = rc
 			return nil
 		},
-		cl.option.retryOpts...,
+		append(cl.option.retryOpts, retry.Context(ctx))...,
 	)
 	if err != nil {
 		return nil, err
