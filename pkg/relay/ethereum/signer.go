@@ -13,6 +13,7 @@ import (
 )
 
 type EthereumSigner struct {
+	ctx          context.Context
 	bytesSigner  signer.Signer
 	gethSigner   gethtypes.Signer
 	addressCache common.Address
@@ -36,6 +37,7 @@ func NewEthereumSigner(ctx context.Context, bytesSigner signer.Signer, chainID *
 	gethSigner := gethtypes.LatestSignerForChainID(chainID)
 
 	return &EthereumSigner{
+		ctx:          ctx,
 		bytesSigner:  bytesSigner,
 		gethSigner:   gethSigner,
 		addressCache: addr,
@@ -71,7 +73,7 @@ func (s *EthereumSigner) Sign(address common.Address, tx *gethtypes.Transaction)
 		s.logger.Info("try to sign", "address", address, "txHash", txHash.Hex())
 	}
 
-	sig, err := s.bytesSigner.Sign(context.TODO(), txHash.Bytes())
+	sig, err := s.bytesSigner.Sign(s.ctx, txHash.Bytes())
 	if err != nil {
 		return nil, fmt.Errorf("failed to sign tx: %v", err)
 	}
