@@ -20,8 +20,8 @@ type EthereumSigner struct {
 	NoSign       bool
 }
 
-func NewEthereumSigner(bytesSigner signer.Signer, chainID *big.Int) (*EthereumSigner, error) {
-	pkbytes, err := bytesSigner.GetPublicKey(context.TODO())
+func NewEthereumSigner(ctx context.Context, bytesSigner signer.Signer, chainID *big.Int) (*EthereumSigner, error) {
+	pkbytes, err := bytesSigner.GetPublicKey(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("fail to get public key")
 	}
@@ -71,6 +71,10 @@ func (s *EthereumSigner) Sign(address common.Address, tx *gethtypes.Transaction)
 		s.logger.Info("try to sign", "address", address, "txHash", txHash.Hex())
 	}
 
+	// NOTE: This method is called from methods in the go-ethereum package so we cannot pass a context to this method,
+	//   which means that we cannot cancel Sign method even if the process receives a signal to stop.
+	//   Although we can set a context in a similar way to SetLogger does, leave context.TODO() for now
+	//   because it seems rare to receive a signal while signing a transaction.
 	sig, err := s.bytesSigner.Sign(context.TODO(), txHash.Bytes())
 	if err != nil {
 		return nil, fmt.Errorf("failed to sign tx: %v", err)

@@ -109,7 +109,7 @@ func (c *Chain) SendMsgs(ctx context.Context, msgs []sdk.Msg) ([]core.MsgID, err
 		logger.Info("successfully sent tx")
 		if c.msgEventListener != nil {
 			for i := from; i < iter.Cursor(); i++ {
-				if err := c.msgEventListener.OnSentMsg(context.TODO(), []sdk.Msg{msgs[i]}); err != nil {
+				if err := c.msgEventListener.OnSentMsg(ctx, []sdk.Msg{msgs[i]}); err != nil {
 					logger.Error("failed to OnSendMsg call", err, "index", i)
 				}
 			}

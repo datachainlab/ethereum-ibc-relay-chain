@@ -1,6 +1,7 @@
 package ethereum
 
 import (
+	"context"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -25,7 +26,7 @@ const TxTypeLegacy = "legacy"
 const TxTypeDynamic = "dynamic"
 
 func (c ChainConfig) Build() (core.Chain, error) {
-	return NewChain(c)
+	return NewChain(context.Background(), c)
 }
 
 func (c ChainConfig) Validate() error {

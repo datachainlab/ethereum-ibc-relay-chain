@@ -1,6 +1,7 @@
 package client
 
 import (
+	"context"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -21,8 +22,8 @@ type StateProof struct {
 	StorageProofRLP [][]byte
 }
 
-func (cl ETHClient) GetProof(address common.Address, storageKeys [][]byte, blockNumber *big.Int) (*StateProof, error) {
-	bz, err := cl.getProof(address, storageKeys, "0x"+blockNumber.Text(16))
+func (cl ETHClient) GetProof(ctx context.Context, address common.Address, storageKeys [][]byte, blockNumber *big.Int) (*StateProof, error) {
+	bz, err := cl.getProof(ctx, address, storageKeys, "0x"+blockNumber.Text(16))
 	if err != nil {
 		return nil, err
 	}
@@ -93,7 +94,7 @@ func (cl ETHClient) GetProof(address common.Address, storageKeys [][]byte, block
 	return &encodedProof, nil
 }
 
-func (cl ETHClient) getProof(address common.Address, storageKeys [][]byte, blockNumber string) ([]byte, error) {
+func (cl ETHClient) getProof(ctx context.Context, address common.Address, storageKeys [][]byte, blockNumber string) ([]byte, error) {
 	hashes := []common.Hash{}
 	for _, k := range storageKeys {
 		var h common.Hash
@@ -103,7 +104,7 @@ func (cl ETHClient) getProof(address common.Address, storageKeys [][]byte, block
 		hashes = append(hashes, h)
 	}
 	var msg json.RawMessage
-	if err := cl.Raw().Call(&msg, "eth_getProof", address, hashes, blockNumber); err != nil {
+	if err := cl.Raw().CallContext(ctx, &msg, "eth_getProof", address, hashes, blockNumber); err != nil {
 		return nil, err
 	}
 	return msg, nil
