@@ -329,6 +329,19 @@ func (c *Chain) QueryChannel(ctx core.QueryContext) (chanRes *chantypes.QueryCha
 	return chantypes.NewQueryChannelResponse(channelToPB(chann), nil, ctx.Height().(clienttypes.Height)), nil
 }
 
+// QueryNextSequenceReceive returns the info about nextSequenceReceive
+func (c *Chain) QueryNextSequenceReceive(ctx QueryContext) (*chantypes.QueryNextSequenceReceiveResponse, error) {
+	logger := c.GetChainLogger()
+	defer logger.TimeTrack(time.Now(), "QueryNextSequenceReceive")
+	nextSequenceRecv, err := c.ibcHandler.GetNextSequenceRecv(c.callOptsFromQueryContext(ctx), c.pathEnd.PortID, c.pathEnd.ChannelID)
+	if err != nil {
+		revertReason, data := c.parseRpcError(err)
+		logger.Error("failed to get nextSequenceRecv", err, logAttrRevertReason, revertReason, logAttrRawErrorData, data)
+		return nil, err
+	}
+	return chantypes.NewQueryNextSequenceReceiveResponse(nextSequenceRecv, nil, ctx.Height().(clienttypes.Height)), nil
+}
+
 // QueryUnreceivedPackets returns a list of unrelayed packet commitments
 func (c *Chain) QueryUnreceivedPackets(ctx core.QueryContext, seqs []uint64) ([]uint64, error) {
 	logger := c.GetChannelLogger()
