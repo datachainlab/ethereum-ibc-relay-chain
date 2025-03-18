@@ -353,6 +353,24 @@ func (c *Chain) TxAcknowledgement(opts *bind.TransactOpts, msg *chantypes.MsgAck
 	})
 }
 
+func (c *Chain) TxTimeout(opts *bind.TransactOpts, msg *chantypes.MsgTimeout) (*gethtypes.Transaction, error) {
+	return c.ibcHandler.TimeoutPacket(opts, ibchandler.IIBCChannelPacketTimeoutMsgTimeoutPacket{
+		Packet: ibchandler.Packet{
+			Sequence:           msg.Packet.Sequence,
+			SourcePort:         msg.Packet.SourcePort,
+			SourceChannel:      msg.Packet.SourceChannel,
+			DestinationPort:    msg.Packet.DestinationPort,
+			DestinationChannel: msg.Packet.DestinationChannel,
+			Data:               msg.Packet.Data,
+			TimeoutHeight:      ibchandler.HeightData(msg.Packet.TimeoutHeight),
+			TimeoutTimestamp:   msg.Packet.TimeoutTimestamp,
+		},
+		Proof:       msg.ProofUnreceived,
+		ProofHeight: pbToHandlerHeight(msg.ProofHeight),
+		NextSequenceRecv: msg.NextSequenceRecv,
+	})
+}
+
 func (c *Chain) TxChannelUpgradeInit(opts *bind.TransactOpts, msg *chantypes.MsgChannelUpgradeInit) (*gethtypes.Transaction, error) {
 	return c.ibcHandler.ChannelUpgradeInit(opts, ibchandler.IIBCChannelUpgradeBaseMsgChannelUpgradeInit{
 		PortId:                c.pathEnd.PortID,
@@ -465,6 +483,8 @@ func (c *Chain) BuildMessageTx(opts *bind.TransactOpts, msg sdk.Msg, skipUpdateC
 		tx, err = c.TxRecvPacket(opts, msg)
 	case *chantypes.MsgAcknowledgement:
 		tx, err = c.TxAcknowledgement(opts, msg)
+	case *chantypes.MsgTimeout:
+		tx, err = c.TxTimeout(opts, msg)
 	case *chantypes.MsgChannelUpgradeInit:
 		tx, err = c.TxChannelUpgradeInit(opts, msg)
 	case *chantypes.MsgChannelUpgradeTry:
