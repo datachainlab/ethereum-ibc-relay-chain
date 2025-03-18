@@ -330,7 +330,7 @@ func (c *Chain) QueryChannel(ctx core.QueryContext) (chanRes *chantypes.QueryCha
 }
 
 // QueryNextSequenceReceive returns the info about nextSequenceReceive
-func (c *Chain) QueryNextSequenceReceive(ctx QueryContext) (*chantypes.QueryNextSequenceReceiveResponse, error) {
+func (c *Chain) QueryNextSequenceReceive(ctx core.QueryContext) (*chantypes.QueryNextSequenceReceiveResponse, error) {
 	logger := c.GetChainLogger()
 	defer logger.TimeTrack(time.Now(), "QueryNextSequenceReceive")
 	nextSequenceRecv, err := c.ibcHandler.GetNextSequenceRecv(c.callOptsFromQueryContext(ctx), c.pathEnd.PortID, c.pathEnd.ChannelID)
