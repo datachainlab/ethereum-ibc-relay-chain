@@ -23,6 +23,8 @@ import (
 	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/hyperledger-labs/yui-relayer/core"
 	"github.com/hyperledger-labs/yui-relayer/log"
+	"github.com/hyperledger-labs/yui-relayer/otelcore/semconv"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/datachainlab/ethereum-ibc-relay-chain/pkg/client"
 	"github.com/datachainlab/ethereum-ibc-relay-chain/pkg/contract/ibchandler"
@@ -57,6 +59,7 @@ func (c *Chain) SendMsgs(ctx context.Context, msgs []sdk.Msg) ([]core.MsgID, err
 		} else if built == nil {
 			break
 		} else {
+			trace.SpanFromContext(ctx).SetAttributes(semconv.TxHashKey.String(built.tx.Hash().String()))
 			logger = iter.updateLoggerMessageInfo(logger, from, built.count)
 			logger = &log.RelayLogger{Logger: logger.With(
 				logAttrTxHash, built.tx.Hash(),
@@ -130,6 +133,7 @@ func (c *Chain) GetMsgResult(ctx context.Context, id core.MsgID) (core.MsgResult
 		return nil, fmt.Errorf("unexpected message id type: %T", id)
 	}
 	txHash := msgID.TxHash()
+	trace.SpanFromContext(ctx).SetAttributes(semconv.TxHashKey.String(txHash.String()))
 	receipt, err := c.client.WaitForReceiptAndGet(ctx, txHash)
 	if err != nil {
 		return nil, err

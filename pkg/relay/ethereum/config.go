@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/datachainlab/ethereum-ibc-relay-chain/pkg/utils"
+	"github.com/hyperledger-labs/yui-relayer/otelcore"
 
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
 	"github.com/ethereum/go-ethereum/common"
@@ -26,7 +27,11 @@ const TxTypeLegacy = "legacy"
 const TxTypeDynamic = "dynamic"
 
 func (c ChainConfig) Build() (core.Chain, error) {
-	return NewChain(context.Background(), c)
+	chain, err := NewChain(context.Background(), c)
+	if err != nil {
+		return nil, err
+	}
+	return otelcore.NewChain(chain, tracer), nil
 }
 
 func (c ChainConfig) Validate() error {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"math/big"
+	"net/http"
 	"time"
 
 	"github.com/avast/retry-go"
@@ -14,6 +15,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/rpc"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 type ETHClient struct {
@@ -43,7 +45,9 @@ func WithRetryOption(rops ...retry.Option) Option {
 }
 
 func NewETHClient(endpoint string, opts ...Option) (*ETHClient, error) {
-	rpcClient, err := rpc.DialHTTP(endpoint)
+	rpcClient, err := rpc.DialOptions(context.Background(), endpoint, rpc.WithHTTPClient(&http.Client{
+		Transport: otelhttp.NewTransport(http.DefaultTransport),
+	}))
 	if err != nil {
 		return nil, err
 	}
