@@ -215,7 +215,7 @@ func (c *Chain) RegisterMsgEventListener(listener core.MsgEventListener) {
 	c.msgEventListener = listener
 }
 
-// QueryClientConsensusState retrevies the latest consensus state for a client in state at a given height
+// QueryClientConsensusState retrieves the latest consensus state for a client in state at a given height
 func (c *Chain) QueryClientConsensusState(ctx core.QueryContext, dstClientConsHeight ibcexported.Height) (*clienttypes.QueryConsensusStateResponse, error) {
 	logger := c.GetChainLogger()
 	defer logger.TimeTrackContext(ctx.Context(), time.Now(), "QueryClientConsensusState")
