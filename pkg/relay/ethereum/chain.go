@@ -112,7 +112,7 @@ func NewChain(ctx context.Context, config ChainConfig) (*Chain, error) {
 	txMaxSize := config.GetTxMaxSize()
 	if txMaxSize == 0 {
 		txMaxSize = 128 * 1024 // go-ethereum/core/txpool/legacypool/legacypool.go
-		logger.Info(fmt.Sprintf("txMaxSize is zero. set to %v", txMaxSize))
+		logger.InfoContext(ctx, fmt.Sprintf("txMaxSize is zero. set to %v", txMaxSize))
 	}
 
 	return &Chain{
@@ -160,7 +160,7 @@ func (c *Chain) LatestHeight(ctx context.Context) (ibcexported.Height, error) {
 	logger := c.GetChainLogger()
 	bn, err := c.client.BlockNumber(ctx)
 	if err != nil {
-		logger.Error("failed to get block number", err)
+		logger.ErrorContext(ctx, "failed to get block number", err)
 		return nil, err
 	}
 	return clienttypes.NewHeight(0, bn), nil
@@ -215,27 +215,27 @@ func (c *Chain) RegisterMsgEventListener(listener core.MsgEventListener) {
 	c.msgEventListener = listener
 }
 
-// QueryClientConsensusState retrevies the latest consensus state for a client in state at a given height
+// QueryClientConsensusState retrieves the latest consensus state for a client in state at a given height
 func (c *Chain) QueryClientConsensusState(ctx core.QueryContext, dstClientConsHeight ibcexported.Height) (*clienttypes.QueryConsensusStateResponse, error) {
 	logger := c.GetChainLogger()
-	defer logger.TimeTrack(time.Now(), "QueryClientConsensusState")
+	defer logger.TimeTrackContext(ctx.Context(), time.Now(), "QueryClientConsensusState")
 	s, found, err := c.ibcHandler.GetConsensusState(c.callOptsFromQueryContext(ctx), c.pathEnd.ClientID, pbToHostHeight(dstClientConsHeight))
 	if err != nil {
 		revertReason, data := c.parseRpcError(err)
-		logger.Error("failed to get consensus state", err, logAttrRevertReason, revertReason, logAttrRawErrorData, data)
+		logger.ErrorContext(ctx.Context(), "failed to get consensus state", err, logAttrRevertReason, revertReason, logAttrRawErrorData, data)
 		return nil, err
 	} else if !found {
-		logger.Error("client consensus not found", errors.New("client consensus not found"))
+		logger.ErrorContext(ctx.Context(), "client consensus not found", errors.New("client consensus not found"))
 		return nil, fmt.Errorf("client consensus not found: %v", c.pathEnd.ClientID)
 	}
 	var consensusState ibcexported.ConsensusState
 	if err := c.Codec().UnmarshalInterface(s, &consensusState); err != nil {
-		logger.Error("failed to unmarshal consensus state", err)
+		logger.ErrorContext(ctx.Context(), "failed to unmarshal consensus state", err)
 		return nil, err
 	}
 	any, err := clienttypes.PackConsensusState(consensusState)
 	if err != nil {
-		logger.Error("failed to pack consensus state", err)
+		logger.ErrorContext(ctx.Context(), "failed to pack consensus state", err)
 		return nil, err
 	}
 	return clienttypes.NewQueryConsensusStateResponse(any, nil, ctx.Height().(clienttypes.Height)), nil
@@ -245,24 +245,24 @@ func (c *Chain) QueryClientConsensusState(ctx core.QueryContext, dstClientConsHe
 // height represents the height of dst chain
 func (c *Chain) QueryClientState(ctx core.QueryContext) (*clienttypes.QueryClientStateResponse, error) {
 	logger := c.GetChainLogger()
-	defer logger.TimeTrack(time.Now(), "QueryClientState")
+	defer logger.TimeTrackContext(ctx.Context(), time.Now(), "QueryClientState")
 	s, found, err := c.ibcHandler.GetClientState(c.callOptsFromQueryContext(ctx), c.pathEnd.ClientID)
 	if err != nil {
 		revertReason, data := c.parseRpcError(err)
-		logger.Error("failed to get client state", err, logAttrRevertReason, revertReason, logAttrRawErrorData, data)
+		logger.ErrorContext(ctx.Context(), "failed to get client state", err, logAttrRevertReason, revertReason, logAttrRawErrorData, data)
 		return nil, err
 	} else if !found {
-		logger.Error("client not found", errors.New("client not found"))
+		logger.ErrorContext(ctx.Context(), "client not found", errors.New("client not found"))
 		return nil, fmt.Errorf("client not found: %v", c.pathEnd.ClientID)
 	}
 	var clientState ibcexported.ClientState
 	if err := c.Codec().UnmarshalInterface(s, &clientState); err != nil {
-		logger.Error("failed to unmarshal client state", err)
+		logger.ErrorContext(ctx.Context(), "failed to unmarshal client state", err)
 		return nil, err
 	}
 	any, err := clienttypes.PackClientState(clientState)
 	if err != nil {
-		logger.Error("failed to pack client state", err)
+		logger.ErrorContext(ctx.Context(), "failed to pack client state", err)
 		return nil, err
 	}
 	return clienttypes.NewQueryClientStateResponse(any, nil, ctx.Height().(clienttypes.Height)), nil
@@ -287,11 +287,11 @@ var emptyConnRes = conntypes.NewQueryConnectionResponse(
 // QueryConnection returns the remote end of a given connection
 func (c *Chain) QueryConnection(ctx core.QueryContext, connectionID string) (*conntypes.QueryConnectionResponse, error) {
 	logger := c.GetChainLogger()
-	defer logger.TimeTrack(time.Now(), "QueryConnection")
+	defer logger.TimeTrackContext(ctx.Context(), time.Now(), "QueryConnection")
 	conn, found, err := c.ibcHandler.GetConnection(c.callOptsFromQueryContext(ctx), connectionID)
 	if err != nil {
 		revertReason, data := c.parseRpcError(err)
-		logger.Error("failed to get connection", err, logAttrRevertReason, revertReason, logAttrRawErrorData, data)
+		logger.ErrorContext(ctx.Context(), "failed to get connection", err, logAttrRevertReason, revertReason, logAttrRawErrorData, data)
 		return nil, err
 	} else if !found {
 		return emptyConnRes, nil
@@ -317,11 +317,11 @@ var emptyChannelRes = chantypes.NewQueryChannelResponse(
 // QueryChannel returns the channel associated with a channelID
 func (c *Chain) QueryChannel(ctx core.QueryContext) (chanRes *chantypes.QueryChannelResponse, err error) {
 	logger := c.GetChainLogger()
-	defer logger.TimeTrack(time.Now(), "QueryChannel")
+	defer logger.TimeTrackContext(ctx.Context(), time.Now(), "QueryChannel")
 	chann, found, err := c.ibcHandler.GetChannel(c.callOptsFromQueryContext(ctx), c.pathEnd.PortID, c.pathEnd.ChannelID)
 	if err != nil {
 		revertReason, data := c.parseRpcError(err)
-		logger.Error("failed to get channel", err, logAttrRevertReason, revertReason, logAttrRawErrorData, data)
+		logger.ErrorContext(ctx.Context(), "failed to get channel", err, logAttrRevertReason, revertReason, logAttrRawErrorData, data)
 		return nil, err
 	} else if !found {
 		return emptyChannelRes, nil
@@ -344,7 +344,7 @@ func (c *Chain) QueryUnreceivedPackets(ctx core.QueryContext, seqs []uint64) ([]
 		case chantypes.UNORDERED:
 			if rc, err := c.ibcHandler.GetPacketReceipt(c.callOptsFromQueryContext(ctx), c.pathEnd.PortID, c.pathEnd.ChannelID, seq); err != nil {
 				revertReason, data := c.parseRpcError(err)
-				logger.Error("failed to get packet receipt", err, logAttrRevertReason, revertReason, logAttrRawErrorData, data)
+				logger.ErrorContext(ctx.Context(), "failed to get packet receipt", err, logAttrRevertReason, revertReason, logAttrRawErrorData, data)
 				return nil, err
 			} else if rc == PACKET_RECEIPT_SUCCESSFUL {
 				received = true
@@ -359,7 +359,7 @@ func (c *Chain) QueryUnreceivedPackets(ctx core.QueryContext, seqs []uint64) ([]
 				nextSequenceRecv, err = c.ibcHandler.GetNextSequenceRecv(c.callOptsFromQueryContext(ctx), c.pathEnd.PortID, c.pathEnd.ChannelID)
 				if err != nil {
 					revertReason, data := c.parseRpcError(err)
-					logger.Error("failed to get nextSequenceRecv", err, logAttrRevertReason, revertReason, logAttrRawErrorData, data)
+					logger.ErrorContext(ctx.Context(), "failed to get nextSequenceRecv", err, logAttrRevertReason, revertReason, logAttrRawErrorData, data)
 					return nil, err
 				}
 			}
@@ -380,30 +380,30 @@ func (c *Chain) QueryUnfinalizedRelayPackets(ctx core.QueryContext, counterparty
 	logger := c.GetChannelLogger()
 	checkpoint, err := c.loadCheckpoint(sendCheckpoint)
 	if err != nil {
-		logger.Error("failed to load checkpoint", err)
+		logger.ErrorContext(ctx.Context(), "failed to load checkpoint", err)
 		return nil, err
 	}
 
 	if checkpoint > ctx.Height().GetRevisionHeight() {
-		logger.Info("`send` checkpoint is greater than target height", "checkpoint", checkpoint, "height", ctx.Height().GetRevisionHeight())
+		logger.InfoContext(ctx.Context(), "`send` checkpoint is greater than target height", "checkpoint", checkpoint, "height", ctx.Height().GetRevisionHeight())
 		return core.PacketInfoList{}, nil
 	}
 	packets, err := c.findSentPackets(ctx, checkpoint)
 	if err != nil {
-		logger.Error("failed to find sent packets", err)
+		logger.ErrorContext(ctx.Context(), "failed to find sent packets", err)
 		return nil, err
 	}
 
 	counterpartyHeader, err := counterparty.GetLatestFinalizedHeader(ctx.Context())
 	if err != nil {
-		logger.Error("failed to get latest finalized header", err)
+		logger.ErrorContext(ctx.Context(), "failed to get latest finalized header", err)
 		return nil, err
 	}
 
 	counterpartyCtx := core.NewQueryContext(ctx.Context(), counterpartyHeader.GetHeight())
 	seqs, err := counterparty.QueryUnreceivedPackets(counterpartyCtx, packets.ExtractSequenceList())
 	if err != nil {
-		logger.Error("failed to query unreceived packets", err)
+		logger.ErrorContext(ctx.Context(), "failed to query unreceived packets", err)
 		return nil, err
 	}
 
@@ -414,7 +414,7 @@ func (c *Chain) QueryUnfinalizedRelayPackets(ctx core.QueryContext, counterparty
 		checkpoint = packets[0].EventHeight.GetRevisionHeight()
 	}
 	if err := c.saveCheckpoint(checkpoint, sendCheckpoint); err != nil {
-		logger.Error("failed to save checkpoint", err)
+		logger.ErrorContext(ctx.Context(), "failed to save checkpoint", err)
 		return nil, err
 	}
 
@@ -430,7 +430,7 @@ func (c *Chain) QueryUnreceivedAcknowledgements(ctx core.QueryContext, seqs []ui
 		commitment, err := c.ibcHandler.GetCommitment(c.callOptsFromQueryContext(ctx), key)
 		if err != nil {
 			revertReason, data := c.parseRpcError(err)
-			logger.Error("failed to get hashed packet commitment", err, logAttrRevertReason, revertReason, logAttrRawErrorData, data)
+			logger.ErrorContext(ctx.Context(), "failed to get hashed packet commitment", err, logAttrRevertReason, revertReason, logAttrRawErrorData, data)
 			return nil, err
 		} else if commitment != [32]byte{} {
 			ret = append(ret, seq)
@@ -444,30 +444,30 @@ func (c *Chain) QueryUnfinalizedRelayAcknowledgements(ctx core.QueryContext, cou
 	logger := c.GetChannelLogger()
 	checkpoint, err := c.loadCheckpoint(recvCheckpoint)
 	if err != nil {
-		logger.Error("failed to load checkpoint", err)
+		logger.ErrorContext(ctx.Context(), "failed to load checkpoint", err)
 		return nil, err
 	}
 
 	if checkpoint > ctx.Height().GetRevisionHeight() {
-		logger.Info("`recv` checkpoint is greater than target height", "checkpoint", checkpoint, "height", ctx.Height().GetRevisionHeight())
+		logger.InfoContext(ctx.Context(), "`recv` checkpoint is greater than target height", "checkpoint", checkpoint, "height", ctx.Height().GetRevisionHeight())
 		return core.PacketInfoList{}, nil
 	}
 	packets, err := c.findReceivedPackets(ctx, checkpoint)
 	if err != nil {
-		logger.Error("failed to find received packets", err)
+		logger.ErrorContext(ctx.Context(), "failed to find received packets", err)
 		return nil, err
 	}
 
 	counterpartyHeader, err := counterparty.GetLatestFinalizedHeader(ctx.Context())
 	if err != nil {
-		logger.Error("failed to get latest finalized header", err)
+		logger.ErrorContext(ctx.Context(), "failed to get latest finalized header", err)
 		return nil, err
 	}
 
 	counterpartyCtx := core.NewQueryContext(ctx.Context(), counterpartyHeader.GetHeight())
 	seqs, err := counterparty.QueryUnreceivedAcknowledgements(counterpartyCtx, packets.ExtractSequenceList())
 	if err != nil {
-		logger.Error("failed to query unreceived acknowledgements", err)
+		logger.ErrorContext(ctx.Context(), "failed to query unreceived acknowledgements", err)
 		return nil, err
 	}
 
@@ -478,7 +478,7 @@ func (c *Chain) QueryUnfinalizedRelayAcknowledgements(ctx core.QueryContext, cou
 		checkpoint = packets[0].EventHeight.GetRevisionHeight()
 	}
 	if err := c.saveCheckpoint(checkpoint, recvCheckpoint); err != nil {
-		logger.Error("failed to save checkpoint", err)
+		logger.ErrorContext(ctx.Context(), "failed to save checkpoint", err)
 		return nil, err
 	}
 

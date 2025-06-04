@@ -149,19 +149,19 @@ func processSendTxResult(ctx context.Context, logger *log.RelayLogger, c *Chain,
 			logger = &log.RelayLogger{Logger: logger.With(
 				logAttrRawErrorData, hex.EncodeToString(returnData),
 			)}
-			logger.Error("failed to get revert reason from RPC error", err)
+			logger.ErrorContext(ctx, "failed to get revert reason from RPC error", err)
 		} else {
 			logger = &log.RelayLogger{Logger: logger.With(
 				logAttrRevertReason, revertReason,
 				logAttrRawErrorData, hex.EncodeToString(returnData),
 			)}
 		}
-		logger.Error("failed to send tx", err)
+		logger.ErrorContext(ctx, "failed to send tx", err)
 		return err
 	}
 
 	if rawTxData, err := tx.MarshalBinary(); err != nil {
-		logger.Error("failed to encode tx", err)
+		logger.ErrorContext(ctx, "failed to encode tx", err)
 	} else {
 		logger = &log.RelayLogger{Logger: logger.With(
 			logAttrRawTxData, hex.EncodeToString(rawTxData),
@@ -169,14 +169,14 @@ func processSendTxResult(ctx context.Context, logger *log.RelayLogger, c *Chain,
 	}
 
 	if receipt, err := c.client.WaitForReceiptAndGet(ctx, tx.Hash()); err != nil {
-		logger.Error("failed to wait for tx receipt", err)
+		logger.ErrorContext(ctx, "failed to wait for tx receipt", err)
 		return err
 	} else if receipt.Status == gethtypes.ReceiptStatusFailed {
 		if revertReason, returnData, err := c.getRevertReasonFromReceipt(ctx, receipt); err != nil {
 			logger = &log.RelayLogger{Logger: logger.With(
 				logAttrRawErrorData, hex.EncodeToString(returnData),
 			)}
-			logger.Error("failed to get revert reason from receipt", err)
+			logger.ErrorContext(ctx, "failed to get revert reason from receipt", err)
 		} else {
 			logger = &log.RelayLogger{Logger: logger.With(
 				logAttrRevertReason, revertReason,

@@ -10,6 +10,7 @@ import (
 	"github.com/datachainlab/ethereum-ibc-relay-chain/pkg/contract/iibcchannelupgradablemodule"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/hyperledger-labs/yui-relayer/config"
+	"github.com/hyperledger-labs/yui-relayer/coreutil"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
@@ -98,8 +99,8 @@ func proposeUpgradeCmd(ctx *config.Context) *cobra.Command {
 				return err
 			} else if chain, ok := chains[chainID]; !ok {
 				return fmt.Errorf("chain not found: %s", chainID)
-			} else if ethChain, ok = chain.Chain.(*Chain); !ok {
-				return fmt.Errorf("chain is not ethereum: %T", chain.Chain)
+			} else if ethChain, err = coreutil.UnwrapChain[*Chain](chain); err != nil {
+				return err
 			}
 
 			return ethChain.ProposeUpgrade(
@@ -152,8 +153,8 @@ func allowTransitionToFlushCompleteCmd(ctx *config.Context) *cobra.Command {
 				return err
 			} else if chain, ok := chains[chainID]; !ok {
 				return fmt.Errorf("chain not found: %s", chainID)
-			} else if ethChain, ok = chain.Chain.(*Chain); !ok {
-				return fmt.Errorf("chain is not ethereum: %T", chain.Chain)
+			} else if ethChain, err = coreutil.UnwrapChain[*Chain](chain); err != nil {
+				return err
 			}
 
 			return ethChain.AllowTransitionToFlushComplete(
@@ -209,8 +210,8 @@ func proposeAppVersionCmd(ctx *config.Context) *cobra.Command {
 				return err
 			} else if chain, ok := chains[chainID]; !ok {
 				return fmt.Errorf("chain not found: %s", chainID)
-			} else if ethChain, ok = chain.Chain.(*Chain); !ok {
-				return fmt.Errorf("chain is not ethereum: %T", chain.Chain)
+			} else if ethChain, err = coreutil.UnwrapChain[*Chain](chain.Chain); err != nil {
+				return err
 			}
 
 			return ethChain.ProposeAppVersion(
