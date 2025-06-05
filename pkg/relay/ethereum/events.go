@@ -59,13 +59,13 @@ func (chain *Chain) findSentPackets(ctx core.QueryContext, fromHeight uint64) (c
 		chain.Path().ChannelID,
 	); err != nil {
 		revertReason, data := chain.parseRpcError(err)
-		logger.Error("failed to get channel", err, "port_id", chain.Path().PortID, "channel_id", chain.Path().ChannelID,
+		logger.ErrorContext(ctx.Context(), "failed to get channel", err, "port_id", chain.Path().PortID, "channel_id", chain.Path().ChannelID,
 			logAttrRevertReason, revertReason,
 			logAttrRawErrorData, data)
 		return nil, err
 	} else if !found {
 		err := fmt.Errorf("channel not found")
-		logger.Error("failed to get channel", err, "port_id", chain.Path().PortID, "channel_id", chain.Path().ChannelID)
+		logger.ErrorContext(ctx.Context(), "failed to get channel", err, "port_id", chain.Path().PortID, "channel_id", chain.Path().ChannelID)
 		return nil, err
 	} else {
 		dstPortID = channel.Counterparty.PortId
@@ -73,10 +73,10 @@ func (chain *Chain) findSentPackets(ctx core.QueryContext, fromHeight uint64) (c
 	}
 	logs, err := chain.filterLogs(ctx, fromHeight, abiSendPacket)
 	if err != nil {
-		logger.Error("failed to filter logs", err)
+		logger.ErrorContext(ctx.Context(), "failed to filter logs", err)
 		return nil, err
 	}
-	defer logger.TimeTrack(now, "findSentPackets", "num_logs", len(logs))
+	defer logger.TimeTrackContext(ctx.Context(), now, "findSentPackets", "num_logs", len(logs))
 
 	var packets core.PacketInfoList
 	for _, log := range logs {
@@ -115,7 +115,7 @@ func (chain *Chain) findReceivedPackets(ctx core.QueryContext, fromHeight uint64
 
 	recvPacketEvents, err := chain.findRecvPacketEvents(ctx, fromHeight)
 	if err != nil {
-		logger.Error("failed to find recv packet events", err)
+		logger.ErrorContext(ctx.Context(), "failed to find recv packet events", err)
 		return nil, err
 	} else if len(recvPacketEvents) == 0 {
 		return nil, nil
@@ -123,13 +123,13 @@ func (chain *Chain) findReceivedPackets(ctx core.QueryContext, fromHeight uint64
 
 	writeAckEvents, err := chain.findWriteAckEvents(ctx, recvPacketEvents[0].Raw.BlockNumber)
 	if err != nil {
-		logger.Error("failed to find write ack events", err)
+		logger.ErrorContext(ctx.Context(), "failed to find write ack events", err)
 		return nil, err
 	} else if len(writeAckEvents) == 0 {
 		return nil, nil
 	}
 
-	defer logger.TimeTrack(now, "findReceivedPackets", "num_recv_packet_events", len(recvPacketEvents), "num_write_ack_events", len(writeAckEvents))
+	defer logger.TimeTrackContext(ctx.Context(), now, "findReceivedPackets", "num_recv_packet_events", len(recvPacketEvents), "num_write_ack_events", len(writeAckEvents))
 
 	var packets core.PacketInfoList
 	for _, rp := range recvPacketEvents {

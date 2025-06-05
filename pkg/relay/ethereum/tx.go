@@ -23,6 +23,8 @@ import (
 	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/hyperledger-labs/yui-relayer/core"
 	"github.com/hyperledger-labs/yui-relayer/log"
+	"github.com/hyperledger-labs/yui-relayer/otelcore/semconv"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/datachainlab/ethereum-ibc-relay-chain/pkg/client"
 	"github.com/datachainlab/ethereum-ibc-relay-chain/pkg/contract/ibchandler"
@@ -52,11 +54,12 @@ func (c *Chain) SendMsgs(ctx context.Context, msgs []sdk.Msg) ([]core.MsgID, err
 		built, err := iter.BuildTx(ctx, c)
 
 		if err != nil {
-			logger.Error("failed to build msg tx", err)
+			logger.ErrorContext(ctx, "failed to build msg tx", err)
 			return nil, err
 		} else if built == nil {
 			break
 		} else {
+			trace.SpanFromContext(ctx).SetAttributes(semconv.TxHashKey.String(built.tx.Hash().String()))
 			logger = iter.updateLoggerMessageInfo(logger, from, built.count)
 			logger = &log.RelayLogger{Logger: logger.With(
 				logAttrTxHash, built.tx.Hash(),
@@ -65,20 +68,20 @@ func (c *Chain) SendMsgs(ctx context.Context, msgs []sdk.Msg) ([]core.MsgID, err
 		}
 
 		if rawTxData, err := built.tx.MarshalBinary(); err != nil {
-			logger.Error("failed to encode tx", err)
+			logger.ErrorContext(ctx, "failed to encode tx", err)
 		} else {
 			logger = &log.RelayLogger{Logger: logger.With(logAttrRawTxData, hex.EncodeToString(rawTxData))}
 		}
 
 		err = c.client.SendTransaction(ctx, built.tx)
 		if err != nil {
-			logger.Error("failed to send tx", err)
+			logger.ErrorContext(ctx, "failed to send tx", err)
 			return nil, err
 		}
 
 		receipt, err := c.client.WaitForReceiptAndGet(ctx, built.tx.Hash())
 		if err != nil {
-			logger.Error("failed to get receipt", err)
+			logger.ErrorContext(ctx, "failed to get receipt", err)
 			return nil, err
 		} else {
 			logger = &log.RelayLogger{Logger: logger.With(
@@ -94,7 +97,7 @@ func (c *Chain) SendMsgs(ctx context.Context, msgs []sdk.Msg) ([]core.MsgID, err
 				logger = &log.RelayLogger{Logger: logger.With(
 					logAttrRawErrorData, hex.EncodeToString(rawErrorData),
 				)}
-				logger.Error("failed to get revert reason", err)
+				logger.ErrorContext(ctx, "failed to get revert reason", err)
 			} else {
 				logger = &log.RelayLogger{Logger: logger.With(
 					logAttrRawErrorData, hex.EncodeToString(rawErrorData),
@@ -103,14 +106,14 @@ func (c *Chain) SendMsgs(ctx context.Context, msgs []sdk.Msg) ([]core.MsgID, err
 			}
 
 			err := errors.New("tx execution reverted")
-			logger.Error("tx execution reverted", err)
+			logger.ErrorContext(ctx, "tx execution reverted", err)
 			return nil, err
 		}
-		logger.Info("successfully sent tx")
+		logger.InfoContext(ctx, "successfully sent tx")
 		if c.msgEventListener != nil {
 			for i := from; i < iter.Cursor(); i++ {
 				if err := c.msgEventListener.OnSentMsg(ctx, []sdk.Msg{msgs[i]}); err != nil {
-					logger.Error("failed to OnSendMsg call", err, "index", i)
+					logger.ErrorContext(ctx, "failed to OnSendMsg call", err, "index", i)
 				}
 			}
 		}
@@ -130,6 +133,7 @@ func (c *Chain) GetMsgResult(ctx context.Context, id core.MsgID) (core.MsgResult
 		return nil, fmt.Errorf("unexpected message id type: %T", id)
 	}
 	txHash := msgID.TxHash()
+	trace.SpanFromContext(ctx).SetAttributes(semconv.TxHashKey.String(txHash.String()))
 	receipt, err := c.client.WaitForReceiptAndGet(ctx, txHash)
 	if err != nil {
 		return nil, err
@@ -139,7 +143,7 @@ func (c *Chain) GetMsgResult(ctx context.Context, id core.MsgID) (core.MsgResult
 	}
 	revertReason, rawErrorData, err := c.getRevertReasonFromReceipt(ctx, receipt)
 	if err != nil {
-		logger.Error("failed to get revert reason", err,
+		logger.ErrorContext(ctx, "failed to get revert reason", err,
 			logAttrRawErrorData, hex.EncodeToString(rawErrorData),
 			logAttrTxHash, msgID.TxHashHex,
 			logAttrBlockHash, receipt.BlockHash.Hex(),
@@ -189,12 +193,12 @@ func (c *Chain) TxUpdateClient(opts *bind.TransactOpts, msg *clienttypes.MsgUpda
 		}
 		// ensure that the contract and function are allowed
 		if c.allowLCFunctions.IsAllowed(lcAddr, fnSel) {
-			log.GetLogger().Info("contract function is allowed", "contract", lcAddr.Hex(), "selector", fmt.Sprintf("0x%x", fnSel))
+			log.GetLogger().InfoContext(opts.Context, "contract function is allowed", "contract", lcAddr.Hex(), "selector", fmt.Sprintf("0x%x", fnSel))
 			calldata := append(fnSel[:], args...)
 			return bind.NewBoundContract(lcAddr, abi.ABI{}, c.client, c.client, c.client).RawTransact(opts, calldata)
 		}
 		// fallback to send an UpdateClient to the IBC handler contract
-		log.GetLogger().Warn("contract function is not allowed", "contract", lcAddr.Hex(), "selector", fmt.Sprintf("0x%x", fnSel))
+		log.GetLogger().WarnContext(opts.Context, "contract function is not allowed", "contract", lcAddr.Hex(), "selector", fmt.Sprintf("0x%x", fnSel))
 	}
 	return c.ibcHandler.UpdateClient(opts, m)
 }
@@ -565,7 +569,7 @@ func estimateGas(
 	logger *log.RelayLogger,
 ) (uint64, error) {
 	if rawTxData, err := tx.MarshalBinary(); err != nil {
-		logger.Error("failed to encode tx", err)
+		logger.ErrorContext(ctx, "failed to encode tx", err)
 	} else {
 		logger = &log.RelayLogger{Logger: logger.With(logAttrRawTxData, hex.EncodeToString(rawTxData))}
 	}
@@ -575,7 +579,7 @@ func estimateGas(
 		if revertReason, rawErrorData, err := c.getRevertReasonFromRpcError(err); err != nil {
 			// Raw error data may be available even if revert reason isn't available.
 			logger = &log.RelayLogger{Logger: logger.With(logAttrRawErrorData, hex.EncodeToString(rawErrorData))}
-			logger.Error("failed to get revert reason", err)
+			logger.ErrorContext(ctx, "failed to get revert reason", err)
 		} else {
 			logger = &log.RelayLogger{Logger: logger.With(
 				logAttrRawErrorData, hex.EncodeToString(rawErrorData),
@@ -583,7 +587,7 @@ func estimateGas(
 			)}
 		}
 
-		logger.Error("failed to estimate gas", err)
+		logger.ErrorContext(ctx, "failed to estimate gas", err)
 		return 0, err
 	}
 
@@ -593,7 +597,7 @@ func estimateGas(
 			return 0, fmt.Errorf("estimated gas exceeds max gas limit")
 		}
 
-		logger.Warn("estimated gas exceeds max gas limit",
+		logger.WarnContext(ctx, "estimated gas exceeds max gas limit",
 			logAttrEstimatedGas, txGasLimit,
 			logAttrMaxGasLimit, c.Config().MaxGasLimit,
 		)
@@ -687,7 +691,7 @@ func (iter *CallIter) buildSingleTx(ctx context.Context, c *Chain) (*CallIterBui
 		tx, err := c.BuildMessageTx(opts, iter.Current(), iter.skipUpdateClientCommitment)
 		c.ethereumSigner.NoSign = false
 		if err != nil {
-			logger.Error("failed to build tx for gas estimation", err)
+			logger.ErrorContext(ctx, "failed to build tx for gas estimation", err)
 			return nil, err
 		}
 
@@ -700,7 +704,7 @@ func (iter *CallIter) buildSingleTx(ctx context.Context, c *Chain) (*CallIterBui
 
 	tx, err := c.BuildMessageTx(opts, iter.Current(), iter.skipUpdateClientCommitment)
 	if err != nil {
-		logger.Error("failed to build tx", err)
+		logger.ErrorContext(ctx, "failed to build tx", err)
 		return nil, err
 	}
 
@@ -733,12 +737,12 @@ func (iter *CallIter) buildMultiTx(ctx context.Context, c *Chain) (*CallIterBuil
 			tx, err := c.BuildMessageTx(opts, iter.msgs[i], iter.skipUpdateClientCommitment)
 			c.ethereumSigner.NoSign = false
 			if err != nil {
-				logger.Error("failed to build tx for gas estimation", err)
+				logger.ErrorContext(ctx, "failed to build tx for gas estimation", err)
 				return nil, err
 			}
 			if tx.To() == nil {
 				err2 := fmt.Errorf("no target address")
-				logger.Error("failed to construct Multicall3Call", err2)
+				logger.ErrorContext(ctx, "failed to construct Multicall3Call", err2)
 				return nil, err2
 			}
 			txs = append(txs, *tx)
@@ -790,7 +794,7 @@ func (iter *CallIter) buildMultiTx(ctx context.Context, c *Chain) (*CallIterBuil
 	logger = iter.updateLoggerMessageInfo(logger, iter.Cursor(), count)
 
 	if err != nil {
-		logger.Error("failed to prepare multicall tx", err)
+		logger.ErrorContext(ctx, "failed to prepare multicall tx", err)
 		return nil, err
 	}
 
@@ -799,7 +803,7 @@ func (iter *CallIter) buildMultiTx(ctx context.Context, c *Chain) (*CallIterBuil
 	// add raw tx to log attribute
 	tx, err := c.multicall3.Aggregate(opts, lastOkCalls)
 	if err != nil {
-		logger.Error("failed to build multicall tx with real send parameters", err)
+		logger.ErrorContext(ctx, "failed to build multicall tx with real send parameters", err)
 		return nil, err
 	}
 	return &CallIterBuildResult{tx, count}, nil
