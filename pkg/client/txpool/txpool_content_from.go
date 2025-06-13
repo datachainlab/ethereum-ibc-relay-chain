@@ -1,4 +1,4 @@
-//go:build !ethereum_ibc_relay_chain_debug_txpool_content_from
+//go:build !ethereum_ibc_relay_chain_debug
 
 package txpool
 
