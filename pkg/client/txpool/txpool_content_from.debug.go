@@ -1,4 +1,4 @@
-//go:build ethereum_ibc_relay_chain_debug
+//go:build yrly_debug
 
 package txpool
 
