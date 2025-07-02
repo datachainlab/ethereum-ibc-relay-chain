@@ -13,9 +13,7 @@ import (
 // ContentFrom calls `txpool_contentFrom` of the Ethereum RPC
 func ContentFrom(ctx context.Context, client *ethclient.Client, address common.Address) (map[string]map[string]*RPCTransaction, error) {
 	res := make(map[string]map[string]*RPCTransaction)
-	val, ok := os.LookupEnv("RELAYER_SKIP_TXPOOL_CONTENT_FROM")
-	if ok && val == "1" {
-	} else {
+	if val, ok := os.LookupEnv("RELAYER_SKIP_TXPOOL_CONTENT_FROM"); !ok || val != "1" {
 		if err := client.Client().CallContext(ctx, &res, "txpool_contentFrom", address); err != nil {
 			return nil, err
 		}
