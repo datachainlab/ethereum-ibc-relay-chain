@@ -37,15 +37,6 @@ type RPCTransaction struct {
 	YParity             *hexutil.Uint64   `json:"yParity,omitempty"`
 }
 
-// ContentFrom calls `txpool_contentFrom` of the Ethereum RPC
-func ContentFrom(ctx context.Context, client *ethclient.Client, address common.Address) (map[string]map[string]*RPCTransaction, error) {
-	var res map[string]map[string]*RPCTransaction
-	if err := client.Client().CallContext(ctx, &res, "txpool_contentFrom", address); err != nil {
-		return nil, err
-	}
-	return res, nil
-}
-
 // PendingTransactions returns pending txs sent from `address` sorted by nonce.
 func PendingTransactions(ctx context.Context, client *ethclient.Client, address common.Address) ([]*RPCTransaction, error) {
 	txs, err := ContentFrom(ctx, client, address)
