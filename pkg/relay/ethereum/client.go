@@ -52,6 +52,7 @@ type IChainClient interface {
 	ethereum.ChainReader
 	ethereum.GasPricer
 	ethereum.FeeHistoryReader
+	ethereum.GasPricer1559
 
 	GetMinimumRequiredFee(ctx context.Context, address common.Address, nonce uint64, priceBump uint64) (*txpool.RPCTransaction, *big.Int, *big.Int, error)
 }

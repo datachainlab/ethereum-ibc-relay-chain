@@ -11,6 +11,8 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 )
 
+const basefeeWiggleMultiplier = 2
+
 type GasFeeCalculator struct {
 	client IChainClient
 	config *ChainConfig
@@ -35,15 +37,9 @@ func (m *GasFeeCalculator) Apply(ctx context.Context, txOpts *bind.TransactOpts)
 	}
 	switch m.config.TxType {
 	case TxTypeLegacy:
-		gasPrice, err := m.client.SuggestGasPrice(ctx)
+		gasPrice, err := m.calculateGasPrice(ctx, oldTx, minFeeCap)
 		if err != nil {
-			return fmt.Errorf("failed to suggest gas price: %v", err)
-		}
-		if oldTx != nil && oldTx.GasPrice != nil && oldTx.GasPrice.ToInt().Cmp(gasPrice) > 0 {
-			return fmt.Errorf("old tx's gasPrice(%v) is higher than suggestion(%v)", oldTx.GasPrice.ToInt(), gasPrice)
-		}
-		if gasPrice.Cmp(minFeeCap) < 0 {
-			gasPrice = minFeeCap
+			return fmt.Errorf("failed to calculate gas price: %v", err)
 		}
 		txOpts.GasPrice = gasPrice
 		return nil
@@ -85,9 +81,62 @@ func (m *GasFeeCalculator) Apply(ctx context.Context, txOpts *bind.TransactOpts)
 		txOpts.GasFeeCap = gasFeeCap
 		txOpts.GasTipCap = gasTipCap
 		return nil
+	case TxTypeAuto:
+		// Calculate gas options in the same way as bind.BoundContract.transact
+		head, err := m.client.HeaderByNumber(ctx, nil)
+		if err != nil {
+			return fmt.Errorf("failed to get latest header: %v", err)
+		}
+
+		if head.BaseFee == nil {
+			gasPrice, err := m.calculateGasPrice(ctx, oldTx, minFeeCap)
+			if err != nil {
+				return fmt.Errorf("failed to calculate gas price: %v", err)
+			}
+			txOpts.GasPrice = gasPrice
+			return nil
+		} else {
+			gasTipCap, err := m.client.SuggestGasTipCap(ctx)
+			if err != nil {
+				return err
+			}
+			if gasTipCap.Cmp(minTipCap) < 0 {
+				gasTipCap = minTipCap
+			}
+
+			gasFeeCap := new(big.Int).Add(
+				gasTipCap,
+				new(big.Int).Mul(head.BaseFee, big.NewInt(basefeeWiggleMultiplier)),
+			)
+			if gasFeeCap.Cmp(minFeeCap) < 0 {
+				gasFeeCap = minFeeCap
+			}
+
+			if gasFeeCap.Cmp(gasTipCap) < 0 {
+				return fmt.Errorf("maxFeePerGas (%v) < maxPriorityFeePerGas (%v)", gasFeeCap, gasTipCap)
+			}
+			txOpts.GasFeeCap = gasFeeCap
+			txOpts.GasTipCap = gasTipCap
+			return nil
+		}
 	default:
-		return nil
+		panic("unsupported tx type")
 	}
+}
+
+func (m *GasFeeCalculator) calculateGasPrice(ctx context.Context, oldTx *txpool.RPCTransaction, minFeeCap *big.Int) (*big.Int, error) {
+	gasPrice, err := m.client.SuggestGasPrice(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to suggest gas price: %v", err)
+	}
+	if oldTx != nil && oldTx.GasPrice != nil && oldTx.GasPrice.ToInt().Cmp(gasPrice) > 0 {
+		return nil, fmt.Errorf("old tx's gasPrice(%v) is higher than suggestion(%v)", oldTx.GasPrice.ToInt(), gasPrice)
+	}
+	if gasPrice.Cmp(minFeeCap) < 0 {
+		gasPrice = minFeeCap
+	}
+
+	return gasPrice, nil
 }
 
 func (m *GasFeeCalculator) feeHistory(ctx context.Context) (*big.Int, *big.Int, error) {
