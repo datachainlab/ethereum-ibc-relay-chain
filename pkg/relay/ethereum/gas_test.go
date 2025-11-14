@@ -145,7 +145,8 @@ type MockChainClient struct {
 }
 
 func (cl *MockChainClient) SuggestGasPrice(ctx context.Context) (*big.Int, error) {
-	return &cl.MockSuggestGasPrice, nil
+	// Copy the big.Int to prevent modification of the original value in tests
+	return new(big.Int).Set(&cl.MockSuggestGasPrice), nil
 }
 
 func inclByPercent(n *big.Int, percent uint64) {
@@ -177,10 +178,12 @@ func (cl *MockChainClient) HeaderByNumber(ctx context.Context, number *big.Int) 
 func (cl *MockChainClient) FeeHistory(ctx context.Context, blockCount uint64, lastBlock *big.Int, rewardPercentiles []float64) (*ethereum.FeeHistory, error) {
 	return &ethereum.FeeHistory{
 		Reward: [][]*big.Int{ // gasTipCap
-			{&cl.MockHistoryGasTipCap},
+			// Copy the big.Int to prevent modification of the original value in tests
+			{new(big.Int).Set(&cl.MockHistoryGasTipCap)},
 		},
 		BaseFee: []*big.Int{ // baseFee. This is used as gasFeeCap
-			&cl.MockHistoryGasFeeCap,
+			// Copy the big.Int to prevent modification of the original value in tests
+			new(big.Int).Set(&cl.MockHistoryGasFeeCap),
 		},
 	}, nil
 }
@@ -213,7 +216,7 @@ func TestPriceBumpLegacy(t *testing.T) {
 		}
 	}
 
-	// test that old tx's gasPrice is already exceeds suggestion
+	// test the case where old tx's gasPrice already exceeds suggestion
 	{
 		cli.MockSuggestGasPrice.SetUint64(99)
 		err := calculator.Apply(context.Background(), txOpts)
@@ -254,9 +257,9 @@ func TestPriceBumpDynamic(t *testing.T) {
 
 	// test that gasTipCap and gasFeeCap are bumped from old tx's one
 	{
-		// set suggenstion between old value and bump value to apply bump value
+		// set suggestion to a value between old value and bump value to apply bump value
 		cli.MockHistoryGasTipCap.SetUint64(201)
-		cli.MockHistoryGasFeeCap.SetUint64(301 - 201) // note that gasTipCap is added to gasFeeCap
+		cli.MockHistoryGasFeeCap.SetUint64(301 - 201) // note that the suggested gasFeeCap is this value plus gasFeeCap above
 		if err := calculator.Apply(context.Background(), txOpts); err != nil {
 			t.Fatal(err)
 		}
@@ -268,18 +271,19 @@ func TestPriceBumpDynamic(t *testing.T) {
 		}
 	}
 
-	// test that old only tx's gasTipCap exceeds suggestion
+	// test the case where only old tx's gasTipCap exceeds suggestion
 	{
-		cli.MockHistoryGasTipCap.SetUint64(199) // lower than old tx's tipCap(=200)
+		cli.MockHistoryGasTipCap.SetUint64(199)       // lower than old tx's tipCap(=200)
+		cli.MockHistoryGasFeeCap.SetUint64(301 - 199) // greater than old tx's feeCap(=300)
 		err := calculator.Apply(context.Background(), txOpts)
 		if err != nil {
 			t.Fatal(err)
 		}
 	}
 
-	// test that old only tx's gasFeeCap exceeds suggestion
+	// test the case where only old tx's gasFeeCap exceeds suggestion
 	{
-		// Because gasTipCap suggestion is added to gasFeeCap suggenstion,
+		// Because gasTipCap suggestion is added to gasFeeCap suggestion,
 		// gasTipCap suggestion should be lower than old tx's gasFeeCap
 		cli.MockPendingTransaction.GasTipCap = (*hexutil.Big)(big.NewInt(100))
 		cli.MockPendingTransaction.GasFeeCap = (*hexutil.Big)(big.NewInt(300))
@@ -291,12 +295,12 @@ func TestPriceBumpDynamic(t *testing.T) {
 		}
 	}
 
-	// test that old both tx's gasFeeCap and gasTipCap exceed suggestion
+	// test the case where both old tx's gasFeeCap and gasTipCap exceed suggestion
 	{
 		cli.MockPendingTransaction.GasTipCap = (*hexutil.Big)(big.NewInt(100))
 		cli.MockPendingTransaction.GasFeeCap = (*hexutil.Big)(big.NewInt(300))
-		cli.MockHistoryGasTipCap.SetUint64(100)       // eq to 100
-		cli.MockHistoryGasFeeCap.SetUint64(300 - 100) // eq to 300
+		cli.MockHistoryGasTipCap.SetUint64(100)       // eq to old tx's tipCap(=100)
+		cli.MockHistoryGasFeeCap.SetUint64(300 - 100) // eq to old tx's feeCap(=300)
 		err := calculator.Apply(context.Background(), txOpts)
 		if err == nil || err.Error() != "old tx's gasFeeCap(300) and gasTipCap(100) are greater than or equal to suggestion(300, 100)" {
 			t.Fatal(err)
