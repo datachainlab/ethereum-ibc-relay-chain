@@ -98,7 +98,7 @@ func (m *GasFeeCalculator) Apply(ctx context.Context, txOpts *bind.TransactOpts)
 		} else {
 			gasTipCap, err := m.client.SuggestGasTipCap(ctx)
 			if err != nil {
-				return err
+				return fmt.Errorf("failed to suggest gas tip cap: %v", err)
 			}
 			if gasTipCap.Cmp(minTipCap) < 0 {
 				gasTipCap = minTipCap
