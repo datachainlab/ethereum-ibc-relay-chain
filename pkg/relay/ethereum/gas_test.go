@@ -309,7 +309,7 @@ func TestPriceBumpDynamic(t *testing.T) {
 		cli.MockHistoryGasTipCap.SetUint64(100)       // eq to old tx's tipCap(=100)
 		cli.MockHistoryGasFeeCap.SetUint64(300 - 100) // eq to old tx's feeCap(=300)
 		err := calculator.Apply(context.Background(), txOpts)
-		if err == nil || err.Error() != "old tx's gasFeeCap(300) and gasTipCap(100) are greater than or equal to suggestion(300, 100)" {
+		if err == nil || err.Error() != "failed to apply min gas caps: old tx's gasFeeCap(300) and gasTipCap(100) are greater than or equal to suggestion(300, 100)" {
 			t.Fatal(err)
 		}
 	}
@@ -374,12 +374,11 @@ func TestPriceBumpAutoDynamic(t *testing.T) {
 	// test that gasTipCap and gasFeeCap are bumped from old tx's one
 	{
 		// set suggestion to a value lower than bump value (220) to apply bump value
-		cli.MockSuggestGasTipCap.SetUint64(219)
+		suggestedGasTipCap := int64(219)
 		// set suggestion to a value lower than bump value (330) to apply bump value
-		// NOTE: bumped gasFeeCap = bumped gasTipCap + baseFee * basefeeWiggleMultiplier
-		//   <=> baseFee = (bumped gasFeeCap - bumped gasTipCap) / basefeeWiggleMultiplier
-		//               = (330 - 220) / 2
-		cli.MockLatestHeaderBaseFee = big.NewInt((330-220)/2 - 1)
+		suggestedGasFeeCap := int64(329)
+		cli.MockSuggestGasTipCap.SetInt64(suggestedGasTipCap)
+		cli.MockLatestHeaderBaseFee = calculateBaseFee(suggestedGasTipCap, suggestedGasFeeCap)
 		if err := calculator.Apply(context.Background(), txOpts); err != nil {
 			t.Fatal(err)
 		}
@@ -390,4 +389,46 @@ func TestPriceBumpAutoDynamic(t *testing.T) {
 			t.Errorf("gasFeeCap should be 330 but %v", txOpts.GasFeeCap)
 		}
 	}
+
+	// test the case where only old tx's gasTipCap exceeds suggestion
+	{
+		suggestedGasTipCap := int64(201) // greater than old tx's tipCap(=200)
+		suggestedGasFeeCap := int64(300) // eq to old tx's feeCap(=300)
+		cli.MockSuggestGasTipCap.SetInt64(suggestedGasTipCap)
+		cli.MockLatestHeaderBaseFee = calculateBaseFee(suggestedGasTipCap, suggestedGasFeeCap)
+		err := calculator.Apply(context.Background(), txOpts)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// test the case where only old tx's gasFeeCap exceeds suggestion
+	{
+		suggestedGasTipCap := int64(199) // eq to old tx's tipCap(=200)
+		suggestedGasFeeCap := int64(301) // greater than old tx's feeCap(=300)
+		cli.MockSuggestGasTipCap.SetInt64(suggestedGasTipCap)
+		cli.MockLatestHeaderBaseFee = calculateBaseFee(suggestedGasTipCap, suggestedGasFeeCap)
+		err := calculator.Apply(context.Background(), txOpts)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// test the case where both old tx's gasFeeCap and gasTipCap exceed suggestion
+	{
+		suggestedGasTipCap := int64(200) // eq to old tx's tipCap(=200)
+		suggestedGasFeeCap := int64(300) // eq to old tx's feeCap(=300)
+		cli.MockSuggestGasTipCap.SetInt64(suggestedGasTipCap)
+		cli.MockLatestHeaderBaseFee = calculateBaseFee(suggestedGasTipCap, suggestedGasFeeCap)
+		err := calculator.Apply(context.Background(), txOpts)
+		if err == nil || err.Error() != "failed to apply min gas caps: old tx's gasFeeCap(300) and gasTipCap(200) are greater than or equal to suggestion(300, 200)" {
+			t.Fatal(err)
+		}
+	}
+}
+
+func calculateBaseFee(suggestedGasTipCap, suggestedGasFeeCap int64) *big.Int {
+	// suggested gasFeeCap = suggested gasTipCap + baseFee * basefeeWiggleMultiplier
+	//   <=> baseFee = (suggested gasFeeCap - suggested gasTipCap) / basefeeWiggleMultiplier
+	return big.NewInt((suggestedGasFeeCap - suggestedGasTipCap) / basefeeWiggleMultiplier)
 }
