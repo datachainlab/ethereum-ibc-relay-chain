@@ -71,11 +71,11 @@ func Test_TxOpts_AutoTx(t *testing.T) {
 	if err = calculator.Apply(context.Background(), txOpts); err != nil {
 		t.Fatal(err)
 	}
-	if txOpts.GasTipCap != nil {
-		t.Error("gasTipCap must be nil")
+	if txOpts.GasTipCap == nil || txOpts.GasTipCap.Cmp(big.NewInt(0)) == 0 {
+		t.Error("gasTipCap must be suggested")
 	}
-	if txOpts.GasFeeCap != nil {
-		t.Error("gasFeeCap must be nil")
+	if txOpts.GasFeeCap == nil || txOpts.GasFeeCap.Cmp(big.NewInt(0)) == 0 {
+		t.Error("gasFeeCap must be suggested")
 	}
 	if txOpts.GasPrice != nil {
 		t.Error("gasPrice must be nil")
@@ -137,15 +137,18 @@ func Test_getFeeInfo(t *testing.T) {
 
 type MockChainClient struct {
 	IChainClient
-	MockSuggestGasPrice    big.Int
-	MockPendingTransaction *txpool.RPCTransaction
-	MockLatestHeaderNumber big.Int
-	MockHistoryGasTipCap   big.Int
-	MockHistoryGasFeeCap   big.Int
+	MockSuggestGasPrice     big.Int
+	MockSuggestGasTipCap    big.Int
+	MockPendingTransaction  *txpool.RPCTransaction
+	MockLatestHeaderNumber  big.Int
+	MockLatestHeaderBaseFee *big.Int
+	MockHistoryGasTipCap    big.Int
+	MockHistoryGasFeeCap    big.Int
 }
 
 func (cl *MockChainClient) SuggestGasPrice(ctx context.Context) (*big.Int, error) {
-	return &cl.MockSuggestGasPrice, nil
+	// Copy the big.Int to prevent modification of the original value in tests
+	return new(big.Int).Set(&cl.MockSuggestGasPrice), nil
 }
 
 func inclByPercent(n *big.Int, percent uint64) {
@@ -170,19 +173,26 @@ func (cl *MockChainClient) HeaderByNumber(ctx context.Context, number *big.Int) 
 		}, nil
 	} else {
 		return &gethtypes.Header{
-			Number: &cl.MockLatestHeaderNumber,
+			Number:  &cl.MockLatestHeaderNumber,
+			BaseFee: cl.MockLatestHeaderBaseFee,
 		}, nil
 	}
 }
 func (cl *MockChainClient) FeeHistory(ctx context.Context, blockCount uint64, lastBlock *big.Int, rewardPercentiles []float64) (*ethereum.FeeHistory, error) {
 	return &ethereum.FeeHistory{
 		Reward: [][]*big.Int{ // gasTipCap
-			{&cl.MockHistoryGasTipCap},
+			// Copy the big.Int to prevent modification of the original value in tests
+			{new(big.Int).Set(&cl.MockHistoryGasTipCap)},
 		},
 		BaseFee: []*big.Int{ // baseFee. This is used as gasFeeCap
-			&cl.MockHistoryGasFeeCap,
+			// Copy the big.Int to prevent modification of the original value in tests
+			new(big.Int).Set(&cl.MockHistoryGasFeeCap),
 		},
 	}, nil
+}
+
+func (cl *MockChainClient) SuggestGasTipCap(ctx context.Context) (*big.Int, error) {
+	return new(big.Int).Set(&cl.MockSuggestGasTipCap), nil
 }
 
 func TestPriceBumpLegacy(t *testing.T) {
@@ -213,11 +223,11 @@ func TestPriceBumpLegacy(t *testing.T) {
 		}
 	}
 
-	// test that old tx's gasPrice is already exceeds suggestion
+	// test the case where old tx's gasPrice already exceeds suggestion
 	{
 		cli.MockSuggestGasPrice.SetUint64(99)
 		err := calculator.Apply(context.Background(), txOpts)
-		if err == nil || err.Error() != "old tx's gasPrice(100) is higher than suggestion(99)" {
+		if err == nil || err.Error() != "failed to calculate gas price: old tx's gasPrice(100) is higher than suggestion(99)" {
 			t.Fatal(err)
 		}
 	}
@@ -254,9 +264,9 @@ func TestPriceBumpDynamic(t *testing.T) {
 
 	// test that gasTipCap and gasFeeCap are bumped from old tx's one
 	{
-		// set suggenstion between old value and bump value to apply bump value
+		// set suggestion to a value between old value and bump value to apply bump value
 		cli.MockHistoryGasTipCap.SetUint64(201)
-		cli.MockHistoryGasFeeCap.SetUint64(301 - 201) // note that gasTipCap is added to gasFeeCap
+		cli.MockHistoryGasFeeCap.SetUint64(301 - 201) // note that the suggested gasFeeCap is this value plus gasFeeCap above
 		if err := calculator.Apply(context.Background(), txOpts); err != nil {
 			t.Fatal(err)
 		}
@@ -268,18 +278,19 @@ func TestPriceBumpDynamic(t *testing.T) {
 		}
 	}
 
-	// test that old only tx's gasTipCap exceeds suggestion
+	// test the case where only old tx's gasTipCap exceeds suggestion
 	{
-		cli.MockHistoryGasTipCap.SetUint64(199) // lower than old tx's tipCap(=200)
+		cli.MockHistoryGasTipCap.SetUint64(199)       // lower than old tx's tipCap(=200)
+		cli.MockHistoryGasFeeCap.SetUint64(301 - 199) // greater than old tx's feeCap(=300)
 		err := calculator.Apply(context.Background(), txOpts)
 		if err != nil {
 			t.Fatal(err)
 		}
 	}
 
-	// test that old only tx's gasFeeCap exceeds suggestion
+	// test the case where only old tx's gasFeeCap exceeds suggestion
 	{
-		// Because gasTipCap suggestion is added to gasFeeCap suggenstion,
+		// Because gasTipCap suggestion is added to gasFeeCap suggestion,
 		// gasTipCap suggestion should be lower than old tx's gasFeeCap
 		cli.MockPendingTransaction.GasTipCap = (*hexutil.Big)(big.NewInt(100))
 		cli.MockPendingTransaction.GasFeeCap = (*hexutil.Big)(big.NewInt(300))
@@ -291,15 +302,133 @@ func TestPriceBumpDynamic(t *testing.T) {
 		}
 	}
 
-	// test that old both tx's gasFeeCap and gasTipCap exceed suggestion
+	// test the case where both old tx's gasFeeCap and gasTipCap exceed suggestion
 	{
 		cli.MockPendingTransaction.GasTipCap = (*hexutil.Big)(big.NewInt(100))
 		cli.MockPendingTransaction.GasFeeCap = (*hexutil.Big)(big.NewInt(300))
-		cli.MockHistoryGasTipCap.SetUint64(100)       // eq to 100
-		cli.MockHistoryGasFeeCap.SetUint64(300 - 100) // eq to 300
+		cli.MockHistoryGasTipCap.SetUint64(100)       // eq to old tx's tipCap(=100)
+		cli.MockHistoryGasFeeCap.SetUint64(300 - 100) // eq to old tx's feeCap(=300)
 		err := calculator.Apply(context.Background(), txOpts)
-		if err == nil || err.Error() != "old tx's gasFeeCap(300) and gasTipCap(100) are greater than or equal to suggestion(300, 100)" {
+		if err == nil || err.Error() != "failed to apply min gas caps: old tx's gasFeeCap(300) and gasTipCap(100) are greater than or equal to suggestion(300, 100)" {
 			t.Fatal(err)
 		}
 	}
+}
+
+func TestPriceBumpAutoLegacy(t *testing.T) {
+	cli := MockChainClient{}
+	config := createConfig()
+	config.TxType = TxTypeAuto
+	config.PriceBump = 10
+	calculator := NewGasFeeCalculator(&cli, config)
+
+	txOpts := &bind.TransactOpts{}
+	txOpts.Nonce = big.NewInt(1)
+
+	cli.MockPendingTransaction = &txpool.RPCTransaction{
+		GasPrice:  (*hexutil.Big)(big.NewInt(100)),
+		GasTipCap: (*hexutil.Big)(big.NewInt(200)),
+		GasFeeCap: (*hexutil.Big)(big.NewInt(300)),
+		Nonce:     (hexutil.Uint64)(txOpts.Nonce.Uint64()),
+	}
+
+	// test that gasPrice is bumped from old tx's gasFeeCap
+	{
+		cli.MockSuggestGasPrice.SetUint64(100)
+		if err := calculator.Apply(context.Background(), txOpts); err != nil {
+			t.Fatal(err)
+		}
+		if txOpts.GasPrice.Uint64() != 330 { //gasFeeCap * 1.1
+			t.Errorf("gasPrice should be 330 but %v", txOpts.GasPrice)
+		}
+	}
+
+	// test the case where old tx's gasPrice already exceeds suggestion
+	{
+		cli.MockSuggestGasPrice.SetUint64(99)
+		err := calculator.Apply(context.Background(), txOpts)
+		if err == nil || err.Error() != "failed to calculate gas price: old tx's gasPrice(100) is higher than suggestion(99)" {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestPriceBumpAutoDynamic(t *testing.T) {
+	cli := MockChainClient{}
+	config := createConfig()
+	config.TxType = TxTypeAuto
+	config.PriceBump = 10
+	calculator := NewGasFeeCalculator(&cli, config)
+
+	txOpts := &bind.TransactOpts{}
+	txOpts.Nonce = big.NewInt(1)
+
+	cli.MockLatestHeaderNumber.SetUint64(1000)
+	cli.MockPendingTransaction = &txpool.RPCTransaction{
+		GasPrice:  (*hexutil.Big)(big.NewInt(100)),
+		GasTipCap: (*hexutil.Big)(big.NewInt(200)),
+		GasFeeCap: (*hexutil.Big)(big.NewInt(300)),
+		Nonce:     (hexutil.Uint64)(txOpts.Nonce.Uint64()),
+	}
+
+	// test that gasTipCap and gasFeeCap are bumped from old tx's one
+	{
+		// set suggestion to a value lower than bump value (220) to apply bump value
+		suggestedGasTipCap := int64(219)
+		// set suggestion to a value lower than bump value (330) to apply bump value
+		suggestedGasFeeCap := int64(329)
+		cli.MockSuggestGasTipCap.SetInt64(suggestedGasTipCap)
+		cli.MockLatestHeaderBaseFee = calculateBaseFee(suggestedGasTipCap, suggestedGasFeeCap)
+		if err := calculator.Apply(context.Background(), txOpts); err != nil {
+			t.Fatal(err)
+		}
+		if txOpts.GasTipCap.Uint64() != 220 {
+			t.Errorf("gasTipCap should be 220 but %v", txOpts.GasTipCap)
+		}
+		if txOpts.GasFeeCap.Uint64() != 330 {
+			t.Errorf("gasFeeCap should be 330 but %v", txOpts.GasFeeCap)
+		}
+	}
+
+	// test the case where only old tx's gasTipCap exceeds suggestion
+	{
+		suggestedGasTipCap := int64(201) // greater than old tx's tipCap(=200)
+		suggestedGasFeeCap := int64(300) // eq to old tx's feeCap(=300)
+		cli.MockSuggestGasTipCap.SetInt64(suggestedGasTipCap)
+		cli.MockLatestHeaderBaseFee = calculateBaseFee(suggestedGasTipCap, suggestedGasFeeCap)
+		err := calculator.Apply(context.Background(), txOpts)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// test the case where only old tx's gasFeeCap exceeds suggestion
+	{
+		suggestedGasTipCap := int64(199) // eq to old tx's tipCap(=200)
+		suggestedGasFeeCap := int64(301) // greater than old tx's feeCap(=300)
+		cli.MockSuggestGasTipCap.SetInt64(suggestedGasTipCap)
+		cli.MockLatestHeaderBaseFee = calculateBaseFee(suggestedGasTipCap, suggestedGasFeeCap)
+		err := calculator.Apply(context.Background(), txOpts)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// test the case where both old tx's gasFeeCap and gasTipCap exceed suggestion
+	{
+		suggestedGasTipCap := int64(200) // eq to old tx's tipCap(=200)
+		suggestedGasFeeCap := int64(300) // eq to old tx's feeCap(=300)
+		cli.MockSuggestGasTipCap.SetInt64(suggestedGasTipCap)
+		cli.MockLatestHeaderBaseFee = calculateBaseFee(suggestedGasTipCap, suggestedGasFeeCap)
+		err := calculator.Apply(context.Background(), txOpts)
+		if err == nil || err.Error() != "failed to apply min gas caps: old tx's gasFeeCap(300) and gasTipCap(200) are greater than or equal to suggestion(300, 200)" {
+			t.Fatal(err)
+		}
+	}
+}
+
+func calculateBaseFee(suggestedGasTipCap, suggestedGasFeeCap int64) *big.Int {
+	// suggested gasFeeCap = suggested gasTipCap + baseFee * basefeeWiggleMultiplier
+	//   <=> baseFee = (suggested gasFeeCap - suggested gasTipCap) / basefeeWiggleMultiplier
+	return big.NewInt((suggestedGasFeeCap - suggestedGasTipCap) / basefeeWiggleMultiplier)
 }
