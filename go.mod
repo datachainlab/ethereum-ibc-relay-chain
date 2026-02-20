@@ -1,6 +1,8 @@
 module github.com/datachainlab/ethereum-ibc-relay-chain
 
-go 1.22.0
+go 1.23.0
+
+replace github.com/hyperledger-labs/yui-relayer v0.5.15 => github.com/dai1975/yui-relayer v0.0.0-20260303053141-e0a606bd7f4c
 
 require (
 	github.com/avast/retry-go v3.0.0+incompatible
@@ -226,7 +228,7 @@ require (
 	golang.org/x/exp v0.0.0-20240222234643-814bf88cf225 // indirect
 	golang.org/x/net v0.35.0 // indirect
 	golang.org/x/oauth2 v0.26.0 // indirect
-	golang.org/x/sync v0.11.0 // indirect
+	golang.org/x/sync v0.16.0 // indirect
 	golang.org/x/sys v0.30.0 // indirect
 	golang.org/x/term v0.29.0 // indirect
 	golang.org/x/text v0.22.0 // indirect
