@@ -331,12 +331,12 @@ func (c *Chain) QueryChannel(ctx core.QueryContext) (chanRes *chantypes.QueryCha
 
 // QueryNextSequenceReceive returns the info about nextSequenceReceive
 func (c *Chain) QueryNextSequenceReceive(ctx core.QueryContext) (*chantypes.QueryNextSequenceReceiveResponse, error) {
-	logger := c.GetChainLogger()
-	defer logger.TimeTrack(time.Now(), "QueryNextSequenceReceive")
+	logger := c.GetChannelLogger()
+	defer logger.TimeTrackContext(ctx.Context(), time.Now(), "QueryNextSequenceReceive")
 	nextSequenceRecv, err := c.ibcHandler.GetNextSequenceRecv(c.callOptsFromQueryContext(ctx), c.pathEnd.PortID, c.pathEnd.ChannelID)
 	if err != nil {
 		revertReason, data := c.parseRpcError(err)
-		logger.Error("failed to get nextSequenceRecv", err, logAttrRevertReason, revertReason, logAttrRawErrorData, data)
+		logger.ErrorContext(ctx.Context(), "failed to get nextSequenceRecv", err, logAttrRevertReason, revertReason, logAttrRawErrorData, data)
 		return nil, err
 	}
 	return chantypes.NewQueryNextSequenceReceiveResponse(nextSequenceRecv, nil, ctx.Height().(clienttypes.Height)), nil
