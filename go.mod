@@ -2,15 +2,13 @@ module github.com/datachainlab/ethereum-ibc-relay-chain
 
 go 1.23.0
 
-replace github.com/hyperledger-labs/yui-relayer v0.5.15 => github.com/dai1975/yui-relayer v0.0.0-20260303053141-e0a606bd7f4c
-
 require (
 	github.com/avast/retry-go v3.0.0+incompatible
 	github.com/cosmos/cosmos-sdk v0.50.5
 	github.com/cosmos/gogoproto v1.4.11
 	github.com/cosmos/ibc-go/v8 v8.2.1
 	github.com/ethereum/go-ethereum v1.14.12
-	github.com/hyperledger-labs/yui-relayer v0.5.15
+	github.com/hyperledger-labs/yui-relayer v0.5.20
 	github.com/spf13/cobra v1.8.0
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.10.0
