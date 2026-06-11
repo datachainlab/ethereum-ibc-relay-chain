@@ -44,6 +44,9 @@ message ChainConfig {
   optional uint64 tx_max_size = 19;
 
   uint64 price_bump = 20;
+
+  // Gas cap for eth_estimateGas RPC call.
+  uint64 estimate_gas_cap = 21;
 }
 
 message AllowLCFunctionsConfig {

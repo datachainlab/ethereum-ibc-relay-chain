@@ -198,12 +198,13 @@ func (c *CallFrame) UnmarshalJSON(input []byte) error {
 	return nil
 }
 
-func (cl *ETHClient) EstimateGasFromTx(ctx context.Context, tx *gethtypes.Transaction, from common.Address) (uint64, error) {
+func (cl *ETHClient) EstimateGasFromTx(ctx context.Context, tx *gethtypes.Transaction, from common.Address, gasCap uint64) (uint64, error) {
 	callMsg := ethereum.CallMsg{
 		From:  from,
 		To:    tx.To(),
 		Value: tx.Value(),
 		Data:  tx.Data(),
+		Gas:   gasCap,
 	}
 
 	switch tx.Type() {

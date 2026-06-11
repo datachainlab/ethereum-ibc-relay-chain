@@ -574,7 +574,7 @@ func estimateGas(
 		logger = &log.RelayLogger{Logger: logger.With(logAttrRawTxData, hex.EncodeToString(rawTxData))}
 	}
 
-	estimatedGas, err := c.client.EstimateGasFromTx(ctx, tx, c.ethereumSigner.Address())
+	estimatedGas, err := c.client.EstimateGasFromTx(ctx, tx, c.ethereumSigner.Address(), c.Config().EstimateGasCap)
 	if err != nil {
 		if revertReason, rawErrorData, err := c.getRevertReasonFromRpcError(err); err != nil {
 			// Raw error data may be available even if revert reason isn't available.
